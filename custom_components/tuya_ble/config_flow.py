@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypedDict, cast
+from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
 
 import voluptuous as vol
 from homeassistant import config_entries
@@ -13,9 +13,16 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.device_registry import format_mac
 from tuya_ble_sdk import TuyaBleError, parse_advertisement
 
-from .const import CONF_LOCAL_KEY, DOMAIN, LOGGER, MIN_LOCAL_KEY_LENGTH
+from .const import (
+    CONF_LOCAL_KEY,
+    CONF_PRODUCT_ID,
+    CONF_UUID,
+    DOMAIN,
+    LOGGER,
+    MIN_LOCAL_KEY_LENGTH,
+)
 from .options_flow import TuyaBleOptionsFlow
-from .products import product_for
+from .products import SUPPORTED_PRODUCTS, product_for
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -27,29 +34,44 @@ if TYPE_CHECKING:
 
 
 class TuyaBleCredentialsInput(TypedDict):
-    """The two values the pairing handshake needs from the user."""
+    """What the setup form collects: the credentials, and sometimes the product."""
 
     device_id: str
     local_key: str
+    product_id: NotRequired[str]
 
 
 def _credentials_schema(
     defaults: TuyaBleCredentialsInput | None = None,
+    *,
+    ask_for_product: bool = False,
 ) -> vol.Schema:
-    """Build the device id / local key schema, optionally pre-filled."""
-    return vol.Schema(
-        {
-            vol.Required(
-                CONF_DEVICE_ID,
-                default=defaults["device_id"] if defaults else vol.UNDEFINED,
-            ): selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT),
-            ),
-            vol.Required(CONF_LOCAL_KEY): selector.TextSelector(
-                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
-            ),
-        },
-    )
+    """
+    Build the setup schema, optionally pre-filled.
+
+    The product is only asked for when the advertisement did not name it: a
+    device that is bound to a Tuya account broadcasts an obfuscated value in
+    place of its product id, so nothing in the air says what it is.
+    """
+    schema: dict[vol.Marker, object] = {
+        vol.Required(
+            CONF_DEVICE_ID,
+            default=defaults["device_id"] if defaults else vol.UNDEFINED,
+        ): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT),
+        ),
+        vol.Required(CONF_LOCAL_KEY): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
+        ),
+    }
+    if ask_for_product:
+        schema[vol.Required(CONF_PRODUCT_ID)] = vol.In(
+            {
+                product_id: product.name
+                for product_id, product in SUPPORTED_PRODUCTS.items()
+            }
+        )
+    return vol.Schema(schema)
 
 
 class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
@@ -65,8 +87,9 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     _address: str
-    _product: TuyaBleProduct
+    _product: TuyaBleProduct | None
     _uuid: str
+    _name: str
 
     @staticmethod
     @callback
@@ -85,7 +108,7 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._abort_if_unique_id_configured()
         if not self._adopt(discovery_info):
             return self.async_abort(reason="not_supported")
-        self.context["title_placeholders"] = {"name": self._product.name}
+        self.context["title_placeholders"] = {"name": self._name}
         return await self.async_step_bluetooth_confirm()
 
     async def async_step_bluetooth_confirm(
@@ -98,14 +121,15 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             errors = _validate(user_input)
             if not errors:
+                product = self._product or SUPPORTED_PRODUCTS[user_input["product_id"]]
                 return self.async_create_entry(
-                    title=self._product.name,
+                    title=product.name,
                     data=cast(
                         "TuyaBleConfigData",
                         {
                             CONF_ADDRESS: self._address,
-                            "product_id": self._product.product_id,
-                            "uuid": self._uuid,
+                            CONF_PRODUCT_ID: product.product_id,
+                            CONF_UUID: self._uuid,
                             CONF_DEVICE_ID: user_input["device_id"].strip(),
                             CONF_LOCAL_KEY: user_input["local_key"].strip(),
                         },
@@ -114,8 +138,10 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="bluetooth_confirm",
-            data_schema=_credentials_schema(user_input),
-            description_placeholders={"name": self._product.name},
+            data_schema=_credentials_schema(
+                user_input, ask_for_product=self._product is None
+            ),
+            description_placeholders={"name": self._name},
             errors=errors,
         )
 
@@ -210,7 +236,13 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     def _adopt(self, discovery_info: BluetoothServiceInfoBleak) -> bool:
-        """Read the advertisement and keep it, unless the product is unknown."""
+        """
+        Read the advertisement and keep what it discloses.
+
+        Only the uuid is mandatory — it is what the pairing handshake needs.
+        The product is optional: a bound device does not broadcast a readable
+        product id, and the user is asked for it instead.
+        """
         try:
             advertisement = parse_advertisement(
                 discovery_info.service_data, discovery_info.manufacturer_data
@@ -218,12 +250,12 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         except TuyaBleError as exception:
             LOGGER.debug("Failed to read the advertisement: %s", exception)
             return False
-        product = product_for(advertisement.product_id)
-        if product is None or advertisement.uuid is None:
+        if advertisement.uuid is None:
             return False
         self._address = discovery_info.address
-        self._product = product
+        self._product = product_for(advertisement.product_id)
         self._uuid = advertisement.uuid
+        self._name = self._product.name if self._product else discovery_info.address
         return True
 
     def _candidates(self) -> dict[str, BluetoothServiceInfoBleak]:
@@ -240,14 +272,14 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 def _is_supported(discovery_info: BluetoothServiceInfoBleak) -> bool:
-    """Report whether this advertisement belongs to a product we can talk to."""
+    """Report whether this advertisement identifies a device we can pair with."""
     try:
         advertisement = parse_advertisement(
             discovery_info.service_data, discovery_info.manufacturer_data
         )
     except TuyaBleError:
         return False
-    return product_for(advertisement.product_id) is not None
+    return advertisement.uuid is not None
 
 
 def _validate(user_input: TuyaBleCredentialsInput) -> dict[str, str]:
