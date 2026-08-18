@@ -49,6 +49,13 @@ handshake, one report, disconnect.
 3. The device is discovered automatically once it advertises; confirm the
    discovery and fill in `device_id` and `local_key`.
 
+## Not finished yet
+
+- The artwork under `custom_components/tuya_ble/brand/` is still the
+  blueprint's `TODO` placeholder and has not been submitted to
+  [home-assistant/brands](https://github.com/home-assistant/brands), so Home
+  Assistant shows a generic icon for the integration.
+
 ## Development
 
 ```bash
