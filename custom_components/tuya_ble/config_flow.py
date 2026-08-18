@@ -65,11 +65,11 @@ def _credentials_schema(
         ),
     }
     if ask_for_product:
-        schema[vol.Required(CONF_PRODUCT_ID)] = vol.In(
-            {
-                product_id: product.name
-                for product_id, product in SUPPORTED_PRODUCTS.items()
-            }
+        schema[vol.Required(CONF_PRODUCT_ID)] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=sorted(SUPPORTED_PRODUCTS),
+                translation_key="product",
+            ),
         )
     return vol.Schema(schema)
 
@@ -123,7 +123,7 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             if not errors:
                 product = self._product or SUPPORTED_PRODUCTS[user_input["product_id"]]
                 return self.async_create_entry(
-                    title=product.name,
+                    title=product.model,
                     data=cast(
                         "TuyaBleConfigData",
                         {
@@ -255,7 +255,7 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._address = discovery_info.address
         self._product = product_for(advertisement.product_id)
         self._uuid = advertisement.uuid
-        self._name = self._product.name if self._product else discovery_info.address
+        self._name = self._product.model if self._product else discovery_info.address
         return True
 
     def _candidates(self) -> dict[str, BluetoothServiceInfoBleak]:

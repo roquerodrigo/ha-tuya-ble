@@ -18,7 +18,8 @@ async def test_the_device_info_identifies_the_bluetooth_connection(setup_integra
     assert device_info["connections"] == {(CONNECTION_BLUETOOTH, ADDRESS)}
     assert device_info["manufacturer"] == "Tuya"
     assert device_info["model"] == "SGS01"
-    assert device_info["name"] == "Soil sensor"
+    assert device_info["translation_key"] == "soil_sensor"
+    assert "name" not in device_info
 
 
 async def test_entities_carry_the_device_name(setup_integration):

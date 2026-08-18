@@ -16,12 +16,13 @@ class TuyaBleProduct:
     A supported product, identified by what its advertisement discloses.
 
     The product id is the only identity a Tuya BLE device broadcasts, so it is
-    what discovery matches on; the model and the name are what the device
-    registry shows.
+    what discovery matches on. The name is never shown: it is the translation
+    key the device registry resolves, so the device is named in the user's own
+    language.
     """
 
     product_id: str
-    name: str
+    translation_key: str
     model: str
 
 
@@ -29,7 +30,7 @@ SUPPORTED_PRODUCTS: Mapping[str, TuyaBleProduct] = MappingProxyType(
     {
         "gvygg3m8": TuyaBleProduct(
             product_id="gvygg3m8",
-            name="Soil sensor",
+            translation_key="soil_sensor",
             model="SGS01",
         ),
     }

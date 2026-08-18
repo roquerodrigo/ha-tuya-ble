@@ -45,6 +45,7 @@ async def test_discovery_creates_the_entry(hass):
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["title"] == "SGS01"
     assert result["data"] == {
         "address": ADDRESS,
         "product_id": "gvygg3m8",
