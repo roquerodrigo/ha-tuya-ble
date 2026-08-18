@@ -11,7 +11,7 @@
             },
             "bluetooth_confirm": {
                 "title": "Configurar {name}",
-                "description": "Informe o device id e a local key deste dispositivo. Os dois aparecem na sua conta Tuya. Um dispositivo vinculado a uma conta Tuya não anuncia o que é, então escolha também o produto.",
+                "description": "Informe o device id e a local key deste dispositivo. Os dois aparecem na sua conta Tuya. Um dispositivo vinculado a uma conta Tuya não anuncia o que é, então escolha também o produto.\n\nA primeira leitura chega na próxima vez que o dispositivo se anunciar, o que pode levar alguns minutos — até lá os sensores ficam sem valor. As credenciais só são verificadas nesse momento, então uma local key errada aparece como pedido de re-autenticação, e não como erro neste formulário.",
                 "data": {
                     "device_id": "Device id",
                     "local_key": "Local key",
@@ -20,7 +20,7 @@
             },
             "reauth_confirm": {
                 "title": "Re-autenticar Tuya BLE",
-                "description": "O dispositivo recusou a local key armazenada. Refaça o pareamento no app da Tuya e informe os valores atuais.",
+                "description": "O dispositivo parou de responder com a local key armazenada. Refaça o pareamento no app da Tuya e informe os valores atuais.\n\nComo na configuração inicial, as novas credenciais só são verificadas na próxima vez que o dispositivo se anunciar.",
                 "data": {
                     "device_id": "Device id",
                     "local_key": "Local key"

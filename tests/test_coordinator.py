@@ -118,3 +118,152 @@ async def test_an_advertisement_drives_a_poll(hass, setup_integration, mock_clie
 
     assert mock_client.async_read_data_points.await_count == 1
     assert set(_coordinator(setup_integration).data) == {3, 5, 14, 15}
+
+
+async def test_one_silent_handshake_does_not_ask_for_credentials(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    from tuya_ble_sdk import TuyaBleHandshakeTimeoutError
+
+    mock_client.async_read_data_points.side_effect = TuyaBleHandshakeTimeoutError(
+        "hush"
+    )
+
+    with pytest.raises(TuyaBleHandshakeTimeoutError):
+        await _coordinator(setup_integration)._async_poll_device(service_info())
+    await hass.async_block_till_done()
+
+    assert not hass.config_entries.flow.async_progress()
+
+
+async def test_a_run_of_silent_handshakes_starts_a_reauth_flow(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    from tuya_ble_sdk import TuyaBleHandshakeTimeoutError
+
+    from custom_components.tuya_ble.const import SILENT_HANDSHAKES_BEFORE_REAUTH
+
+    mock_client.async_read_data_points.side_effect = TuyaBleHandshakeTimeoutError(
+        "hush"
+    )
+
+    for _ in range(SILENT_HANDSHAKES_BEFORE_REAUTH):
+        with pytest.raises(TuyaBleHandshakeTimeoutError):
+            await _coordinator(setup_integration)._async_poll_device(service_info())
+    await hass.async_block_till_done()
+
+    assert any(
+        flow["context"]["source"] == "reauth"
+        for flow in hass.config_entries.flow.async_progress()
+    )
+
+
+async def test_a_successful_read_forgets_the_silence(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    from tuya_ble_sdk import TuyaBleHandshakeTimeoutError
+
+    from custom_components.tuya_ble.const import SILENT_HANDSHAKES_BEFORE_REAUTH
+
+    from .conftest import sample_data_points
+
+    coordinator = _coordinator(setup_integration)
+    for _ in range(SILENT_HANDSHAKES_BEFORE_REAUTH - 1):
+        mock_client.async_read_data_points.side_effect = TuyaBleHandshakeTimeoutError(
+            "h"
+        )
+        with pytest.raises(TuyaBleHandshakeTimeoutError):
+            await coordinator._async_poll_device(service_info())
+
+    mock_client.async_read_data_points.side_effect = None
+    mock_client.async_read_data_points.return_value = sample_data_points()
+    await coordinator._async_poll_device(service_info())
+
+    assert coordinator._silent_handshakes == 0
+
+
+async def test_a_plain_connection_failure_never_asks_for_credentials(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    mock_client.async_read_data_points.side_effect = TuyaBleConnectionError("asleep")
+
+    for _ in range(5):
+        with pytest.raises(TuyaBleConnectionError):
+            await _coordinator(setup_integration)._async_poll_device(service_info())
+    await hass.async_block_till_done()
+
+    assert not hass.config_entries.flow.async_progress()
+
+
+async def test_the_timer_reads_a_device_whose_advertisement_never_changes(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    """
+    Home Assistant drops a repeated advertisement, so the callback fires once.
+
+    Without the timer these sensors would be read only when the entry loads.
+    """
+    from unittest.mock import patch
+
+    mock_client.async_read_data_points.reset_mock()
+
+    with patch(
+        "custom_components.tuya_ble.coordinator.async_last_service_info",
+        return_value=service_info(),
+    ):
+        _coordinator(setup_integration).async_poll_if_due(None)
+        await hass.async_block_till_done()
+
+    assert mock_client.async_read_data_points.await_count == 1
+
+
+async def test_the_timer_does_nothing_when_the_device_was_never_seen(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    from unittest.mock import patch
+
+    mock_client.async_read_data_points.reset_mock()
+
+    with patch(
+        "custom_components.tuya_ble.coordinator.async_last_service_info",
+        return_value=None,
+    ):
+        _coordinator(setup_integration).async_poll_if_due(None)
+        await hass.async_block_till_done()
+
+    assert mock_client.async_read_data_points.await_count == 0
+
+
+async def test_the_timer_respects_the_interval(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    """A second tick inside the interval must not open a second connection."""
+    from unittest.mock import patch
+
+    mock_client.async_read_data_points.reset_mock()
+
+    with patch(
+        "custom_components.tuya_ble.coordinator.async_last_service_info",
+        return_value=service_info(),
+    ):
+        _coordinator(setup_integration).async_poll_if_due(None)
+        await hass.async_block_till_done()
+        _coordinator(setup_integration).async_poll_if_due(None)
+        await hass.async_block_till_done()
+
+    assert mock_client.async_read_data_points.await_count == 1
+
+
+async def test_a_device_with_nothing_to_report_keeps_the_last_values(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    """Reading nothing is normal for these sensors and must not blank them."""
+    from .conftest import sample_data_points
+
+    coordinator = _coordinator(setup_integration)
+    mock_client.async_read_data_points.return_value = sample_data_points()
+    coordinator.data = await coordinator._async_poll_device(service_info())
+
+    mock_client.async_read_data_points.return_value = {}
+
+    assert await coordinator._async_poll_device(service_info()) == sample_data_points()

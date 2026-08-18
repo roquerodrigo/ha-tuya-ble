@@ -11,7 +11,7 @@
             },
             "bluetooth_confirm": {
                 "title": "Set up {name}",
-                "description": "Enter the device id and the local key this device uses. Both are listed for the device in your Tuya account. A device that is bound to a Tuya account does not broadcast what it is, so pick the product as well.",
+                "description": "Enter the device id and the local key this device uses. Both are listed for the device in your Tuya account. A device that is bound to a Tuya account does not broadcast what it is, so pick the product as well.\n\nThe first reading arrives the next time the device announces itself, which can take several minutes — until then the sensors stay unknown. The credentials are only checked then, so a wrong local key shows up as a request to re-authenticate rather than an error on this form.",
                 "data": {
                     "device_id": "Device id",
                     "local_key": "Local key",
@@ -20,7 +20,7 @@
             },
             "reauth_confirm": {
                 "title": "Re-authenticate Tuya BLE",
-                "description": "The device rejected the stored local key. Re-pair it in the Tuya app and enter the current values.",
+                "description": "The device stopped answering with the stored local key. Re-pair it in the Tuya app and enter the current values.\n\nAs with the initial setup, the new credentials are only checked the next time the device announces itself.",
                 "data": {
                     "device_id": "Device id",
                     "local_key": "Local key"
