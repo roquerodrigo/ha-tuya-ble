@@ -1,8 +1,14 @@
 {
     "entity": {
         "sensor": {
-            "title": {
-                "default": "mdi:format-quote-close"
+            "soil_moisture": {
+                "default": "mdi:water-percent"
+            },
+            "temperature": {
+                "default": "mdi:thermometer"
+            },
+            "battery_state": {
+                "default": "mdi:battery-heart-variant"
             }
         }
     }

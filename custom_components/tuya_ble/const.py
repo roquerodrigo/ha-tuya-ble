@@ -7,8 +7,13 @@ from logging import Logger, getLogger
 LOGGER: Logger = getLogger(__package__)
 
 DOMAIN = "tuya_ble"
-ATTRIBUTION = "Data provided by https://jsonplaceholder.typicode.com/"
-API_BASE_URL = "https://jsonplaceholder.typicode.com"
+MANUFACTURER = "Tuya"
 
-DEFAULT_SCAN_INTERVAL_SECONDS = 300
-MIN_SCAN_INTERVAL_SECONDS = 30
+CONF_LOCAL_KEY = "local_key"
+CONF_PRODUCT_ID = "product_id"
+CONF_UUID = "uuid"
+
+DEFAULT_SCAN_INTERVAL_SECONDS = 900
+MIN_SCAN_INTERVAL_SECONDS = 60
+
+MIN_LOCAL_KEY_LENGTH = 6

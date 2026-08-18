@@ -4,7 +4,7 @@ Guidance for Claude Code (claude.ai/code) agents working in this repository.
 
 ## Always read `CODE_STYLE.md` first
 
-Before creating, renaming or restructuring any file/class/function, **read [`CODE_STYLE.md`](./CODE_STYLE.md)**. It is the single source of truth for conventions: language, file organisation, naming, typing, properties vs `__init__`, imports, docstrings, comments, coordinator pattern, repairs/diagnostics layout, translations, lint workflow.
+Before creating, renaming or restructuring any file/class/function, **read [`CODE_STYLE.md`](./CODE_STYLE.md)**. It is the single source of truth for conventions: language, file organisation, naming, typing, properties vs `__init__`, imports, docstrings, comments, coordinator pattern, diagnostics layout, translations, lint workflow.
 
 For user-facing topics (supported devices, installation, useful commands), see [`README.md`](./README.md).
 
@@ -16,17 +16,14 @@ This file deliberately avoids restating those rules — it only adds:
 
 ## Current state
 
-The repository was scaffolded from
-[`ha-integration-blueprint`](https://github.com/roquerodrigo/ha-integration-blueprint)
-and everything under `custom_components/tuya_ble/` is still the blueprint's
-**sample** cloud-polling integration: an aiohttp API client, a
-username/password config flow and a demo sensor. None of it describes a Tuya
-device yet.
+The design in [`PLAN.md`](./PLAN.md) is implemented: the blueprint's sample
+cloud integration is gone and `custom_components/tuya_ble/` reads a Tuya BLE
+device over Bluetooth. The protocol lives in the companion SDK
+`tuya-ble-sdk` (sibling repository), which this integration pins exactly from
+`manifest.json`.
 
-[`PLAN.md`](./PLAN.md) is the design being implemented and takes precedence over
-the sample code described below — read it before changing anything under
-`custom_components/`. The same applies to the companion SDK in the sibling
-repository `tuya-ble-sdk`, which owns the protocol.
+`PLAN.md` remains the reference for *why* the design looks the way it does; the
+architecture section below records *what* exists.
 
 ## Verification workflow
 
@@ -55,51 +52,67 @@ Verify the pairing on PyPI before committing: the `requires_dist` of `pytest-hom
 
 ## Architecture
 
-The integration follows the HA `DataUpdateCoordinator` pattern:
+One config entry is one physical device, driven by Bluetooth advertisements:
 
 ```
-config_flow.py   → validates credentials and creates the ConfigEntry
-__init__.py      → instantiates ApiClient + DataUpdateCoordinator, performs the first refresh
-coordinator.py   → polls every scan_interval seconds; returns the typed payload
-sensor.py        → reads coordinator.data and creates the entities
+config_flow.py   → reads the advertisement, asks for device_id + local_key
+__init__.py      → builds the coordinator and forwards the sensor platform
+coordinator.py   → polls when the device announces itself; returns the datapoints
+sensor.py        → one class per entity, picked from a per-product table
 ```
+
+### Why the coordinator is not a `DataUpdateCoordinator`
+
+The supported devices are battery powered and only listen for a moment after
+they advertise. A timer-driven coordinator would mostly reach a sleeping
+device, so `coordinator.py` uses `ActiveBluetoothDataUpdateCoordinator`: Home
+Assistant calls `needs_poll_method` on every advertisement, and
+`scan_interval` (options flow, default 900 s) becomes the minimum spacing
+between two readings rather than a schedule. The coordinator holds no client —
+`TuyaBleClient` is built per poll, connects, reads one report and disconnects.
+
+A `TuyaBleAuthenticationError` from the SDK means the stored local key was
+rejected; the coordinator starts the reauth flow and re-raises.
 
 ### Entry typing
 
-The `data/` package holds one TypedDict/dataclass per file. `data/__init__.py` defines the `type` aliases — `TuyaBleConfigEntry = ConfigEntry[TuyaBleData]`, `JsonPrimitive`/`JsonValue`/`JsonObject` — and re-exports every symbol, so consumers still `from .data import …`. The `TuyaBleData(client, coordinator, integration)` dataclass lives in `data/runtime.py`. State lives on `entry.runtime_data` (auto-discarded on unload), never on `hass.data`.
+The `data/` package holds one TypedDict/dataclass per file. `data/__init__.py`
+defines the `type` aliases — `TuyaBleConfigEntry = ConfigEntry[TuyaBleData]`,
+`TuyaBleDataPoints = Mapping[int, DataPoint]`, `JsonPrimitive`/`JsonValue`/
+`JsonObject` — and re-exports every symbol. `TuyaBleData(coordinator, product,
+integration)` lives in `data/runtime.py`. State lives on `entry.runtime_data`,
+never on `hass.data`.
+
+`data/config_data.py` is what one entry stores: `address` and `product_id` come
+from the advertisement, `uuid` is decrypted from it, and `device_id` /
+`local_key` come from the user's Tuya account.
 
 ### Config flow surface
 
-`config_flow.py` implements four user-facing steps; all share one `_validate` helper and one `_credentials_schema` builder:
+- `async_step_bluetooth` — discovery; parses the advertisement, aborts with
+  `not_supported` when the product id is unknown or the uuid cannot be read,
+  and sets the unique id from the formatted MAC.
+- `async_step_bluetooth_confirm` — asks for `device_id` and `local_key`.
+- `async_step_user` — lists the supported devices seen nearby.
+- `async_step_reauth` / `async_step_reauth_confirm` and
+  `async_step_reconfigure` — both re-ask for the credentials through one
+  `_async_update_credentials` helper.
 
-- `async_step_user` — initial setup; sets unique_id from username, aborts on duplicate.
-- `async_step_reauth` / `async_step_reauth_confirm` — fired when the coordinator raises `ConfigEntryAuthFailed`. `async_update_reload_and_abort` rotates credentials in place.
-- `async_step_reconfigure` — lets the user edit credentials via the integration's three-dot menu, no delete-and-re-add cycle.
-- `async_get_options_flow` — returns `TuyaBleOptionsFlow` from `options_flow.py` (one class per file).
+The credentials are **not** tried against the device while the flow is open: it
+is asleep most of the time, so a connection attempt would time out far more
+often than it would catch a typo. `_validate` only rejects what cannot possibly
+work; a wrong local key surfaces on the first poll as a reauth prompt.
 
-### Options flow
+### Products
 
-`options_flow.py` exposes `scan_interval` (seconds; min 30, default 300). Changing it triggers `async_reload_entry`, which re-instantiates the coordinator with the new `update_interval`.
-
-### API client
-
-`api.py` exposes `TuyaBleApiClient` plus the `_verify_response_or_raise` helper. Exceptions live under `exceptions/`:
-
-- `TuyaBleApiClientError` (base)
-- `TuyaBleApiClientCommunicationError` (timeout, connection)
-- `TuyaBleApiClientAuthenticationError` (401/403)
-
-`_api_wrapper` maps `TimeoutError`, `aiohttp.ClientError` and `socket.gaierror` to `CommunicationError`; any other exception becomes the base error.
+`products.py` is the catalogue of supported devices, keyed by the product id
+the advertisement carries. `sensor.py` maps the same key to the entity classes
+that product exposes, so a second device is a table entry rather than a new
+platform.
 
 ### Diagnostics
 
-`diagnostics.py` returns `TuyaBleDiagnosticsPayload`. `username`/`password` are redacted via `async_redact_data` (driven by `TO_REDACT: frozenset[str]`). `.github/ISSUE_TEMPLATE/bug.yml` asks users to attach the dump.
-
-### Repairs
-
-`repairs.py` is the entry point HA calls when the user clicks **Fix** on an issue:
-
-- `async_create_fix_flow(hass, issue_id, data)` returns a `RepairsFlow`. Branch on `issue_id` for multiple kinds; the default returns `ConfirmRepairFlow`.
-- `async_raise_deprecated_api_issue(hass)` is the sample helper that registers an issue. Call helpers like this from the coordinator/setup when you detect a recoverable problem.
-
-Issue strings live under `issues.<issue_id>` in the translation files.
+`diagnostics.py` returns `TuyaBleDiagnosticsPayload`. `device_id`, `local_key`
+and `uuid` are redacted via `async_redact_data` (driven by
+`TO_REDACT: frozenset[str]`); the dump also carries a summary of the last
+advertisement and the last datapoint report.

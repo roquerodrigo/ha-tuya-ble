@@ -1,70 +1,80 @@
 {
     "config": {
+        "flow_title": "{name}",
         "step": {
             "user": {
                 "title": "Set up Tuya BLE",
-                "description": "Enter your credentials to connect to the API.",
+                "description": "Pick the Tuya BLE device you want to add.",
                 "data": {
-                    "username": "Username",
-                    "password": "Password"
+                    "address": "Device"
+                }
+            },
+            "bluetooth_confirm": {
+                "title": "Set up {name}",
+                "description": "Enter the device id and the local key this device uses. Both are listed for the device in your Tuya account.",
+                "data": {
+                    "device_id": "Device id",
+                    "local_key": "Local key"
                 }
             },
             "reauth_confirm": {
                 "title": "Re-authenticate Tuya BLE",
-                "description": "Your credentials are no longer valid. Enter the updated credentials.",
+                "description": "The device rejected the stored local key. Re-pair it in the Tuya app and enter the current values.",
                 "data": {
-                    "username": "Username",
-                    "password": "Password"
+                    "device_id": "Device id",
+                    "local_key": "Local key"
                 }
             },
             "reconfigure": {
                 "title": "Reconfigure Tuya BLE",
-                "description": "Update the credentials for this entry.",
+                "description": "Update the credentials for this device.",
                 "data": {
-                    "username": "Username",
-                    "password": "Password"
+                    "device_id": "Device id",
+                    "local_key": "Local key"
                 }
             }
         },
         "error": {
-            "auth": "Username/Password is wrong.",
-            "connection": "Unable to connect to the server.",
-            "unknown": "Unknown error occurred."
+            "invalid_device_id": "Enter the device id from your Tuya account.",
+            "invalid_local_key": "The local key is too short to be valid."
         },
         "abort": {
-            "already_configured": "This account is already configured.",
+            "already_configured": "This device is already configured.",
+            "no_devices_found": "No supported Tuya BLE device was found nearby.",
+            "not_supported": "This device is not supported by the integration.",
             "reauth_successful": "Re-authentication was successful.",
             "reconfigure_successful": "Reconfiguration was successful.",
-            "unique_id_mismatch": "The account does not match the one this entry was set up with."
+            "unique_id_mismatch": "The device does not match the one this entry was set up with."
         }
     },
     "options": {
         "step": {
             "init": {
                 "title": "Tuya BLE options",
-                "description": "Tune polling and other behaviour for this entry.",
+                "description": "The device is read at most once per interval, the next time it announces itself.",
                 "data": {
-                    "scan_interval": "Polling interval (seconds)"
+                    "scan_interval": "Minimum interval between readings (seconds)"
                 }
             }
         }
     },
     "entity": {
         "sensor": {
-            "title": {
-                "name": "Title"
-            }
-        }
-    },
-    "issues": {
-        "deprecated_api": {
-            "title": "Deprecated API endpoint in use",
-            "fix_flow": {
-                "step": {
-                    "confirm": {
-                        "title": "Switch to the supported API",
-                        "description": "The endpoint this integration was using has been deprecated. Click submit to acknowledge; update the integration's config to use the new endpoint."
-                    }
+            "soil_moisture": {
+                "name": "Soil moisture"
+            },
+            "temperature": {
+                "name": "Temperature"
+            },
+            "battery": {
+                "name": "Battery"
+            },
+            "battery_state": {
+                "name": "Battery state",
+                "state": {
+                    "low": "Low",
+                    "middle": "Medium",
+                    "high": "High"
                 }
             }
         }

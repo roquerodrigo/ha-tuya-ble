@@ -1,106 +1,120 @@
 from __future__ import annotations
 
-from datetime import timedelta
-from unittest.mock import AsyncMock
+from unittest.mock import patch
 
 import pytest
-from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.update_coordinator import UpdateFailed
-from homeassistant.util import dt as dt_util
+from homeassistant.core import CoreState
+from tuya_ble_sdk import TuyaBleAuthenticationError, TuyaBleConnectionError
 
-from custom_components.tuya_ble.const import DOMAIN
-from custom_components.tuya_ble.coordinator import (
-    FAILURE_GRACE_PERIOD,
-    TuyaBleDataUpdateCoordinator,
-)
-from custom_components.tuya_ble.exceptions import (
-    TuyaBleApiClientAuthenticationError,
-    TuyaBleApiClientError,
-)
+from .conftest import ADDRESS, service_info
 
 
-def _make_coordinator(hass, payload=None, scan_interval=timedelta(minutes=5)):
-    coord = TuyaBleDataUpdateCoordinator(hass=hass, scan_interval=scan_interval)
-    client = AsyncMock()
-    client.async_get_data = AsyncMock(return_value=payload or {})
-    runtime_data = type("D", (), {"client": client})()
-    entry = type("E", (), {"entry_id": "eid", "runtime_data": runtime_data})()
-    coord.config_entry = entry
-    return coord, client
+def _coordinator(entry):
+    return entry.runtime_data.coordinator
 
 
-def test_init_sets_domain_name(hass):
-    coord = TuyaBleDataUpdateCoordinator(
-        hass=hass, scan_interval=timedelta(seconds=300)
-    )
-    assert coord.name == DOMAIN
+@pytest.fixture
+def resolvable_device():
+    with patch(
+        "custom_components.tuya_ble.coordinator.async_ble_device_from_address"
+    ) as resolve:
+        resolve.return_value = service_info().device
+        yield resolve
 
 
-def test_init_sets_update_interval(hass):
-    coord = TuyaBleDataUpdateCoordinator(hass=hass, scan_interval=timedelta(seconds=42))
-    assert coord.update_interval == timedelta(seconds=42)
-
-
-async def test_update_data_returns_payload(hass, sample_payload):
-    coord, _ = _make_coordinator(hass, payload=sample_payload)
-    result = await coord._async_update_data()
-    assert result == sample_payload
-
-
-async def test_update_data_raises_update_failed_on_api_error(hass):
-    coord, client = _make_coordinator(hass)
-    client.async_get_data.side_effect = TuyaBleApiClientError("down")
-    with pytest.raises(UpdateFailed):
-        await coord._async_update_data()
-
-
-async def test_update_data_raises_auth_failed_on_auth_error(hass):
-    coord, client = _make_coordinator(hass)
-    client.async_get_data.side_effect = TuyaBleApiClientAuthenticationError("nope")
-    with pytest.raises(ConfigEntryAuthFailed):
-        await coord._async_update_data()
-
-
-async def test_update_data_serves_last_known_data_within_grace_period(
-    hass, sample_payload
+async def test_the_first_advertisement_is_worth_a_poll(
+    setup_integration, resolvable_device
 ):
-    coord, client = _make_coordinator(hass)
-    coord.data = sample_payload
-    client.async_get_data.side_effect = TuyaBleApiClientError("blip")
-    assert await coord._async_update_data() == sample_payload
+    assert _coordinator(setup_integration)._needs_poll(service_info(), None) is True
 
 
-async def test_update_data_raises_update_failed_after_grace_period(
-    hass, sample_payload
+async def test_a_second_advertisement_within_the_interval_is_not(
+    setup_integration, resolvable_device
 ):
-    coord, client = _make_coordinator(hass)
-    coord.data = sample_payload
-    client.async_get_data.side_effect = TuyaBleApiClientError("down")
-    coord._first_failure_at = (
-        dt_util.utcnow() - FAILURE_GRACE_PERIOD - timedelta(seconds=1)
+    assert _coordinator(setup_integration)._needs_poll(service_info(), 10.0) is False
+
+
+async def test_an_advertisement_after_the_interval_is(
+    setup_integration, resolvable_device
+):
+    assert _coordinator(setup_integration)._needs_poll(service_info(), 1000.0) is True
+
+
+async def test_an_unconnectable_device_is_not_polled(setup_integration):
+    with patch(
+        "custom_components.tuya_ble.coordinator.async_ble_device_from_address",
+        return_value=None,
+    ):
+        assert (
+            _coordinator(setup_integration)._needs_poll(service_info(), None) is False
+        )
+
+
+async def test_a_stopping_instance_is_not_polled(
+    hass, setup_integration, resolvable_device
+):
+    hass.set_state(CoreState.stopping)
+
+    assert _coordinator(setup_integration)._needs_poll(service_info(), None) is False
+
+
+async def test_a_poll_returns_the_report(
+    setup_integration, mock_client, resolvable_device
+):
+    data_points = await _coordinator(setup_integration)._async_poll_device(
+        service_info()
     )
-    with pytest.raises(UpdateFailed):
-        await coord._async_update_data()
+
+    assert set(data_points) == {3, 5, 14, 15}
 
 
-async def test_update_data_raises_update_failed_without_previous_data(hass):
-    coord, client = _make_coordinator(hass)
-    coord.data = None
-    client.async_get_data.side_effect = TuyaBleApiClientError("down")
-    with pytest.raises(UpdateFailed):
-        await coord._async_update_data()
+async def test_a_poll_uses_the_stored_credentials(
+    setup_integration, mock_client, resolvable_device
+):
+    with patch("custom_components.tuya_ble.coordinator.TuyaBleClient") as client_class:
+        client_class.return_value.async_read_data_points = (
+            mock_client.async_read_data_points
+        )
+        await _coordinator(setup_integration)._async_poll_device(service_info())
+
+    credentials = client_class.call_args.args[1]
+    assert credentials.device_id == "dddddddddddddddd"
+    assert credentials.uuid == "0123456789abcdef"
 
 
-async def test_update_data_clears_failure_window_after_success(hass, sample_payload):
-    coord, _ = _make_coordinator(hass, payload=sample_payload)
-    coord._first_failure_at = dt_util.utcnow()
-    await coord._async_update_data()
-    assert coord._first_failure_at is None
+async def test_a_rejected_local_key_starts_a_reauth_flow(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    mock_client.async_read_data_points.side_effect = TuyaBleAuthenticationError("no")
+
+    with pytest.raises(TuyaBleAuthenticationError):
+        await _coordinator(setup_integration)._async_poll_device(service_info())
+    await hass.async_block_till_done()
+
+    assert any(
+        flow["context"]["source"] == "reauth"
+        for flow in hass.config_entries.flow.async_progress()
+    )
 
 
-async def test_auth_error_is_not_absorbed_by_the_grace_period(hass, sample_payload):
-    coord, client = _make_coordinator(hass)
-    coord.data = sample_payload
-    client.async_get_data.side_effect = TuyaBleApiClientAuthenticationError("nope")
-    with pytest.raises(ConfigEntryAuthFailed):
-        await coord._async_update_data()
+async def test_a_connection_failure_is_left_to_the_coordinator(
+    setup_integration, mock_client, resolvable_device
+):
+    mock_client.async_read_data_points.side_effect = TuyaBleConnectionError("asleep")
+
+    with pytest.raises(TuyaBleConnectionError):
+        await _coordinator(setup_integration)._async_poll_device(service_info())
+
+
+async def test_the_address_is_the_configured_one(setup_integration):
+    assert _coordinator(setup_integration).address == ADDRESS
+
+
+async def test_an_advertisement_drives_a_poll(hass, setup_integration, mock_client):
+    from .conftest import inject_advertisement
+
+    inject_advertisement(hass)
+    await hass.async_block_till_done()
+
+    assert mock_client.async_read_data_points.await_count == 1
+    assert set(_coordinator(setup_integration).data) == {3, 5, 14, 15}
