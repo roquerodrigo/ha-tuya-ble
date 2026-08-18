@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import TYPE_CHECKING, cast
 
 from homeassistant.const import CONF_SCAN_INTERVAL, Platform
 from homeassistant.exceptions import ConfigEntryError
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.loader import async_get_loaded_integration
 from tuya_ble_sdk import TuyaBleCredentials
 
-from .const import DEFAULT_SCAN_INTERVAL_SECONDS
+from .const import DEFAULT_SCAN_INTERVAL_SECONDS, POLL_CHECK_INTERVAL_SECONDS
 from .coordinator import TuyaBleDataUpdateCoordinator
 from .data import TuyaBleData
 from .products import product_for
@@ -53,6 +55,13 @@ async def async_setup_entry(
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(coordinator.async_start())
+    entry.async_on_unload(
+        async_track_time_interval(
+            hass,
+            coordinator.async_poll_if_due,
+            timedelta(seconds=POLL_CHECK_INTERVAL_SECONDS),
+        )
+    )
     entry.async_on_unload(entry.add_update_listener(async_reload_entry))
 
     return True
