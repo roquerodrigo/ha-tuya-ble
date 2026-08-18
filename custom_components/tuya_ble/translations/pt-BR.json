@@ -11,10 +11,11 @@
             },
             "bluetooth_confirm": {
                 "title": "Configurar {name}",
-                "description": "Informe o device id e a local key deste dispositivo. Os dois aparecem na sua conta Tuya.",
+                "description": "Informe o device id e a local key deste dispositivo. Os dois aparecem na sua conta Tuya. Um dispositivo vinculado a uma conta Tuya não anuncia o que é, então escolha também o produto.",
                 "data": {
                     "device_id": "Device id",
-                    "local_key": "Local key"
+                    "local_key": "Local key",
+                    "product_id": "Produto"
                 }
             },
             "reauth_confirm": {

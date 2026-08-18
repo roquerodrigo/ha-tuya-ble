@@ -11,10 +11,11 @@
             },
             "bluetooth_confirm": {
                 "title": "Set up {name}",
-                "description": "Enter the device id and the local key this device uses. Both are listed for the device in your Tuya account.",
+                "description": "Enter the device id and the local key this device uses. Both are listed for the device in your Tuya account. A device that is bound to a Tuya account does not broadcast what it is, so pick the product as well.",
                 "data": {
                     "device_id": "Device id",
-                    "local_key": "Local key"
+                    "local_key": "Local key",
+                    "product_id": "Product"
                 }
             },
             "reauth_confirm": {

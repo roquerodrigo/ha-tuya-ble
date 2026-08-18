@@ -55,11 +55,31 @@ async def test_discovery_creates_the_entry(hass):
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_an_unsupported_product_is_rejected(hass):
-    result = await _start_bluetooth_flow(hass, service_info(product_id="whatever"))
+async def test_a_bound_device_is_asked_which_product_it_is(hass):
+    result = await _start_bluetooth_flow(hass, service_info(obfuscated=True))
 
-    assert result["type"] is FlowResultType.ABORT
-    assert result["reason"] == "not_supported"
+    assert result["type"] is FlowResultType.FORM
+    assert "product_id" in result["data_schema"].schema
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_the_chosen_product_reaches_the_entry(hass):
+    result = await _start_bluetooth_flow(hass, service_info(obfuscated=True))
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {**CREDENTIALS, "product_id": "gvygg3m8"}
+    )
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"]["product_id"] == "gvygg3m8"
+    assert result["data"]["uuid"] == "0123456789abcdef"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_a_named_product_is_not_asked_for(hass):
+    result = await _start_bluetooth_flow(hass)
+
+    assert "product_id" not in result["data_schema"].schema
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
@@ -147,16 +167,16 @@ async def test_the_manual_flow_aborts_when_nothing_is_around(hass):
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")
-async def test_the_manual_flow_ignores_unsupported_products(hass):
+async def test_the_manual_flow_lists_a_bound_device_too(hass):
     with patch(
         "custom_components.tuya_ble.config_flow.async_discovered_service_info",
-        return_value=[service_info(product_id="whatever")],
+        return_value=[service_info(obfuscated=True)],
     ):
         result = await hass.config_entries.flow.async_init(
             DOMAIN, context={"source": SOURCE_USER}
         )
 
-    assert result["reason"] == "no_devices_found"
+    assert result["type"] is FlowResultType.FORM
 
 
 @pytest.mark.usefixtures("enable_custom_integrations")

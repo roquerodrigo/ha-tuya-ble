@@ -48,30 +48,43 @@ def enable_custom_integrations(hass, enable_bluetooth) -> None:
     hass.data.pop(DATA_CUSTOM_COMPONENTS, None)
 
 
-def encrypted_uuid(product_id: str = PRODUCT_ID, uuid: str = UUID) -> bytes:
+def encrypted_uuid_for(product_record: bytes, uuid: str = UUID) -> bytes:
     """Encrypt a uuid the way a Tuya BLE advertisement carries it."""
-    key = md5(product_id.encode()).digest()
+    key = md5(product_record).digest()
     return encrypt(key, key, uuid.encode())
+
+
+OBFUSCATED_PRODUCT_RECORD = bytes.fromhex("5bdcee4a9b776f7a")
 
 
 def service_info(
     *,
     address: str = ADDRESS,
     product_id: str | None = PRODUCT_ID,
+    obfuscated: bool = False,
     with_manufacturer_data: bool = True,
     connectable: bool = True,
 ):
-    """Build the advertisement Home Assistant hands to the integration."""
+    """
+    Build the advertisement Home Assistant hands to the integration.
+
+    `obfuscated` reproduces what a device bound to a Tuya account broadcasts:
+    the product-id record carries bytes that name no product but still decrypt
+    the uuid.
+    """
     from bluetooth_data_tools import monotonic_time_coarse
     from habluetooth import BluetoothServiceInfoBleak
 
-    service_data = (
-        {SERVICE_UUID: b"\x00" + product_id.encode()} if product_id is not None else {}
+    record = (
+        OBFUSCATED_PRODUCT_RECORD
+        if obfuscated
+        else (product_id.encode() if product_id is not None else None)
     )
+    service_data = {SERVICE_UUID: b"\x00" + record} if record is not None else {}
     manufacturer_data = (
         {
             MANUFACTURER_DATA_IDENTIFIER: bytes([0x80, 3, 0, 0, 1, 0])
-            + encrypted_uuid(product_id or PRODUCT_ID)
+            + encrypted_uuid_for(record or PRODUCT_ID.encode())
         }
         if with_manufacturer_data
         else {}
