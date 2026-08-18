@@ -55,10 +55,9 @@ device names itself and that question is skipped.
 
 ## Not finished yet
 
-- The artwork under `custom_components/tuya_ble/brand/` is still the
-  blueprint's `TODO` placeholder and has not been submitted to
-  [home-assistant/brands](https://github.com/home-assistant/brands), so Home
-  Assistant shows a generic icon for the integration.
+- The artwork under `custom_components/tuya_ble/brand/` has not been submitted
+  to [home-assistant/brands](https://github.com/home-assistant/brands) yet, so
+  Home Assistant still shows a generic icon for the integration.
 
 ## Development
 
