@@ -191,11 +191,16 @@ Order matters; each step is evidence for the next.
 
 ## Watch out for
 
-- **The advertisement's bound flag reads `0`** on this sensor (unbound), while the
-  Tuya account still lists it. If `PAIR` is rejected, the stored `local_key` is
-  stale — re-pair the device in the Tuya app and read the key again. This is the
-  most likely failure of phase 3, and it is a device state problem, not a code
-  bug.
+- **The advertisement's bound flag read `0`** on this sensor when the plan was
+  written (unbound), while the Tuya account still listed it. If `PAIR` is
+  rejected, the stored `local_key` is stale — re-pair the device in the Tuya app
+  and read the key again.
+- **Resolved during phase 3.** After re-pairing, the device advertises with the
+  bound flag set *and* an obfuscated value in the product-id record: those bytes
+  are no longer the printable `gvygg3m8`, though `md5()` of them still decrypts
+  the uuid. So the product id cannot be read from the air on a bound device, and
+  the config flow asks for it instead. Hash the record as broadcast — decoding
+  it as text first rejects every bound device.
 - **Protocol version 3** — the reference implementation branches on it in a few
   places (`DPS_V4` codes exist for v4 devices). Test against what the device
   actually answers, not against the branch that looked most complete.
