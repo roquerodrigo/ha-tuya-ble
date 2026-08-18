@@ -23,10 +23,7 @@ run `uv run ruff format --check .`, `uv run ruff check .` and
   for one platform, the typed payloads and runtime data) get grouped into a
   package directory with one class per submodule and an `__init__.py`
   re-exporting the public symbols.
-  - Example: `exceptions/` contains `api_client_error.py`,
-    `api_client_communication_error.py`, `api_client_authentication_error.py`,
-    plus `__init__.py`.
-  - Example: `data/` contains `post.py`, `config_data.py`, `options_data.py`,
+  - Example: `data/` contains `config_data.py`, `options_data.py`,
     `diagnostics_entry.py`, `diagnostics_payload.py`, `runtime.py`, plus an
     `__init__.py`. Every TypedDict and dataclass gets its own file — a flat
     multi-class `data.py` is migration debt, not a valid layout.
@@ -37,9 +34,9 @@ run `uv run ruff format --check .`, `uv run ruff check .` and
     default the moment a shape is shared across modules.
 - **`type` aliases are the exception: they live in `data/__init__.py`**
   alongside the re-exports (`JsonPrimitive`, `JsonValue`, `JsonObject`,
-  `TuyaBleConfigEntry`), not in their own files.
+  `TuyaBleConfigEntry`, `TuyaBleDataPoints`), not in their own files.
 - **Helper functions** may live in the same file as the single class that uses
-  them (e.g. `_verify_response_or_raise` in `api.py`).
+  them (e.g. `_validate` in `config_flow.py`).
 - **`__init__.py` of the integration package** wires `async_setup_entry`,
   `async_unload_entry`, `async_reload_entry` and nothing else.
 
@@ -69,8 +66,9 @@ run `uv run ruff format --check .`, `uv run ruff check .` and
 - Concrete platform entities end with the entity type:
   `TuyaBleSensor`, `TuyaBleBinarySensor`,
   `TuyaBleSwitch`.
-- Exception classes end with `Error`: `TuyaBleApiClientError`,
-  `…CommunicationError`, `…AuthenticationError`.
+- Exception classes end with `Error`. The device errors are the SDK's
+  (`TuyaBleError`, `…ConnectionError`, `…AuthenticationError`,
+  `…ProtocolError`); the integration adds none of its own.
 - Private attributes / functions are prefixed with `_`.
 
 ## Typing
@@ -83,9 +81,8 @@ Banned: `typing.Any`, `object` as a value type, bare `dict` / `list` / `tuple` /
 Required:
 
 - `TypedDict` for known dict / JSON shapes (see the `data/` package for the
-  canonical examples: `TuyaBlePost`, `TuyaBleConfigData`,
-  `TuyaBleOptionsData`, `TuyaBleDiagnosticsPayload`,
-  one per file).
+  canonical examples: `TuyaBleConfigData`, `TuyaBleOptionsData`,
+  `TuyaBleDiagnosticsPayload`, one per file).
 - `@dataclass` for structured records (`TuyaBleData` in
   `data/runtime.py`).
 - Named `type` aliases for recursive / shared shapes — `JsonPrimitive`,
@@ -94,10 +91,10 @@ Required:
 - `cast("TypedDictName", value)` at HA framework boundaries that hand us a
   permissive type (e.g. `entry.data` is `MappingProxyType[str, Any]`).
 
-When narrowing an HA-provided callback signature (e.g. `async_step_user`),
-mypy reports `[override]` (Liskov violation). Add `# type: ignore[override]`
-with a one-line comment explaining the deliberate narrowing — see
-`config_flow.py` for the canonical example.
+When narrowing an HA-provided callback signature, mypy reports `[override]`
+(Liskov violation). Add `# type: ignore[override]` with a one-line comment
+explaining the deliberate narrowing; do not add one where mypy does not ask
+for it — `warn_unused_ignores` turns a stale one into an error.
 
 ## Properties and `__init__`
 
@@ -106,9 +103,8 @@ with a one-line comment explaining the deliberate narrowing — see
   (e.g. `self.coordinator`, `self.entity_description`).
 - When the body of `__init__` would only call `super().__init__(...)`, omit
   `__init__` entirely and let Python inherit the parent.
-- Class-level constants like `_attr_attribution = ATTRIBUTION` and
-  `_attr_has_entity_name = True` are fine — they don't depend on instance
-  state.
+- Class-level constants like `_attr_has_entity_name = True` and
+  `_attr_device_class = …` are fine — they don't depend on instance state.
 
 ## Imports
 
@@ -181,11 +177,10 @@ with a one-line comment explaining the deliberate narrowing — see
 - Pre-validate inputs before the network call so user-facing errors point at
   the bad input, not a downstream traceback (`config_flow._validate` rejects
   malformed credentials before contacting the API).
-- Custom exceptions get the same hierarchy:
-  `TuyaBleApiClientError` (base) → `…CommunicationError` (timeout,
-  connection, DNS) and `…AuthenticationError` (401/403). Wrap raw upstream
-  errors at the API client boundary; everything above only catches the
-  custom hierarchy.
+- The device errors come from the SDK's own hierarchy — `TuyaBleError` (base)
+  → `…ConnectionError`, `…AuthenticationError`, `…ProtocolError`. The
+  integration only catches those; it never lets a raw `bleak` exception through
+  its own layers.
 
 ## Coordinator and runtime data
 
@@ -193,38 +188,26 @@ with a one-line comment explaining the deliberate narrowing — see
   (`data/runtime.py`). Never store integration state in `hass.data` — `runtime_data` is
   auto-discarded on unload, the legacy `hass.data[DOMAIN][entry_id]` pattern is
   not.
-- The coordinator is typed as `DataUpdateCoordinator[TuyaBlePost]`
-  (or whatever your real payload TypedDict is). `_async_update_data` returns
-  the typed payload.
-- Use `await coordinator.async_config_entry_first_refresh()` during
-  `async_setup_entry` (not `async_refresh()`) — a failed first refresh raises
-  `ConfigEntryNotReady` and HA retries with backoff automatically.
-- Pass `always_update=False` to the coordinator when the payload TypedDict
-  compares cleanly with `__eq__`; HA then skips listener callbacks and state
-  writes when the data hasn't changed.
-- Use `self.async_contexts()` inside `_async_update_data` to scope API work to
-  the entities currently subscribed — disabled entities shouldn't drive
-  network calls.
-- Error mapping inside `_async_update_data`:
-  - Communication errors → `raise UpdateFailed("Failed to …: %s" % err)`. Pass
-    `retry_after=<seconds>` when the upstream signals an explicit backoff (e.g.
-    HTTP 429 `Retry-After`).
-  - Authentication errors → `raise ConfigEntryAuthFailed(...)` — HA cancels
-    further updates and starts the `SOURCE_REAUTH` flow.
-  - Never let raw upstream exception strings reach `UpdateFailed` when they
-    could carry tokens; convert to a sanitized message at the API client.
+- The coordinator is an
+  `ActiveBluetoothDataUpdateCoordinator[TuyaBleDataPoints | None]`: Bluetooth
+  advertisements drive the poll, not a timer. `entry.async_on_unload(
+  coordinator.async_start())` registers it, and `coordinator.data` is `None`
+  until the first successful reading.
+- Error handling inside the poll method:
+  - Authentication errors → call `config_entry.async_start_reauth(hass)` and
+    re-raise, so the previous reading is kept and the user is prompted.
+  - Anything else is left to the base coordinator, which logs it once and keeps
+    the entities on their last known values.
+  - Never log a local key or a device id.
 
 ## Config / options / repairs / diagnostics
 
-- `config_flow.py` carries `user`, `reauth`, `reauth_confirm` and `reconfigure`
-  steps, all sharing one `_validate` helper and one `_credentials_schema`
-  builder.
+- `config_flow.py` carries `bluetooth`, `bluetooth_confirm`, `user`, `reauth`,
+  `reauth_confirm` and `reconfigure` steps, all sharing one `_validate` helper
+  and one `_credentials_schema` builder.
 - `options_flow.py` holds the single `TuyaBleOptionsFlow`
   class. New options keys go into the `TuyaBleOptionsData`
   TypedDict in `data/options_data.py`.
-- `repairs.py` exposes `async_create_fix_flow`. Sample helpers like
-  `async_raise_deprecated_api_issue` show how to register issues from anywhere
-  in the integration.
 - `diagnostics.py` returns `TuyaBleDiagnosticsPayload`. Sensitive
   keys go into the `TO_REDACT: frozenset[str]` constant.
 
@@ -232,9 +215,8 @@ with a one-line comment explaining the deliberate narrowing — see
 
 - Two locales: `en.json` and `pt-BR.json`. `tests/test_translations.py`
   parametrizes over every locale and fails if their nested key sets diverge.
-- Issue strings live under `issues.<issue_id>`; options strings under
-  `options.step.init.data`; flow strings under `config.step.<step_id>`;
-  entity names under `entity.<platform>.<key>.name`.
+- Options strings live under `options.step.init.data`; flow strings under
+  `config.step.<step_id>`; entity names under `entity.<platform>.<key>.name`.
 
 ## HACS publishing requirements
 

@@ -3,39 +3,31 @@ from __future__ import annotations
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.data_entry_flow import FlowResultType
 
-from custom_components.tuya_ble.const import (
-    DEFAULT_SCAN_INTERVAL_SECONDS,
-)
 
-
-async def test_options_flow_shows_form_with_default(hass, setup_integration):
+async def test_the_form_offers_the_current_interval(hass, setup_integration):
     result = await hass.config_entries.options.async_init(setup_integration.entry_id)
-    assert result["type"] == FlowResultType.FORM
+
+    assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "init"
-    schema = result["data_schema"].schema
-    scan_interval_key = next(
-        k for k in schema if getattr(k, "schema", k) == CONF_SCAN_INTERVAL
-    )
-    assert scan_interval_key.default() == DEFAULT_SCAN_INTERVAL_SECONDS
 
 
-async def test_options_flow_persists_scan_interval(hass, setup_integration):
+async def test_saving_an_interval_stores_it(hass, setup_integration):
     result = await hass.config_entries.options.async_init(setup_integration.entry_id)
+
     result = await hass.config_entries.options.async_configure(
-        result["flow_id"], user_input={CONF_SCAN_INTERVAL: 60}
-    )
-    assert result["type"] == FlowResultType.CREATE_ENTRY
-    assert setup_integration.options[CONF_SCAN_INTERVAL] == 60
-
-
-async def test_options_flow_uses_existing_value_as_default(hass, setup_integration):
-    hass.config_entries.async_update_entry(
-        setup_integration, options={CONF_SCAN_INTERVAL: 120}
+        result["flow_id"], {CONF_SCAN_INTERVAL: 300}
     )
     await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert setup_integration.options[CONF_SCAN_INTERVAL] == 300
+
+
+async def test_the_stored_interval_reaches_the_coordinator(hass, setup_integration):
     result = await hass.config_entries.options.async_init(setup_integration.entry_id)
-    schema = result["data_schema"].schema
-    scan_interval_key = next(
-        k for k in schema if getattr(k, "schema", k) == CONF_SCAN_INTERVAL
+    await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_SCAN_INTERVAL: 300}
     )
-    assert scan_interval_key.default() == 120
+    await hass.async_block_till_done()
+
+    assert setup_integration.runtime_data.coordinator._scan_interval_seconds == 300

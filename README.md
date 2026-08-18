@@ -14,14 +14,24 @@ Home Assistant already has — and never contacts the Tuya cloud at runtime.
 The protocol lives in a separate package,
 [`tuya-ble-sdk`](https://github.com/roquerodrigo/tuya-ble-sdk).
 
-> **Status: scaffold.** The repository is set up and the design is settled, but
-> the device support is not implemented yet. See [`PLAN.md`](./PLAN.md).
-
 ## Supported devices
 
-| Category | Product ID | Device | Entities |
-| --- | --- | --- | --- |
-| `zwjcy` | `gvygg3m8` | Soil sensor (SGS01) | soil moisture, temperature, battery level, battery state |
+| Product ID | Device | Entities |
+| --- | --- | --- |
+| `gvygg3m8` | Soil sensor (SGS01) | soil moisture, temperature, battery level, battery state |
+
+A device broadcasts its product id in the advertisement, so that is what
+discovery matches on and what a new device is added by: supporting one more is
+a table entry, not a new platform.
+
+## How it reads the device
+
+These sensors are battery powered and sleep between advertisements — they only
+listen for a moment after announcing themselves. Home Assistant therefore
+triggers a reading **when the device advertises**, not on a timer, and the
+polling interval in the integration's options is the *minimum* spacing between
+two readings (15 minutes by default). Each reading is one short connection:
+handshake, one report, disconnect.
 
 ## Requirements
 

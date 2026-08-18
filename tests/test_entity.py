@@ -1,44 +1,38 @@
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+import pytest
+from homeassistant.helpers.device_registry import CONNECTION_BLUETOOTH
 
-from custom_components.tuya_ble.const import ATTRIBUTION, DOMAIN
-from custom_components.tuya_ble.entity import TuyaBleEntity
-
-
-def _make_entity(entry_id="test_entry_id") -> TuyaBleEntity:
-    coordinator = MagicMock()
-    coordinator.config_entry.entry_id = entry_id
-    return TuyaBleEntity(coordinator=coordinator)
+from .conftest import ADDRESS, inject_advertisement
 
 
-def test_attribution():
-    assert _make_entity()._attr_attribution == ATTRIBUTION
+def _sensor(entry):
+    from custom_components.tuya_ble.sensor import TuyaBleSoilMoistureSensor
+
+    return TuyaBleSoilMoistureSensor(coordinator=entry.runtime_data.coordinator)
 
 
-def test_has_entity_name():
-    assert _make_entity()._attr_has_entity_name is True
+async def test_the_device_info_identifies_the_bluetooth_connection(setup_integration):
+    device_info = _sensor(setup_integration).device_info
+
+    assert device_info["connections"] == {(CONNECTION_BLUETOOTH, ADDRESS)}
+    assert device_info["manufacturer"] == "Tuya"
+    assert device_info["model"] == "SGS01"
+    assert device_info["name"] == "Soil sensor"
 
 
-def test_device_info_name():
-    assert _make_entity().device_info["name"] == "Tuya BLE"
+async def test_entities_carry_the_device_name(setup_integration):
+    assert _sensor(setup_integration)._attr_has_entity_name is True
 
 
-def test_device_info_manufacturer():
-    assert _make_entity().device_info["manufacturer"] == "Tuya BLE"
+@pytest.mark.usefixtures("setup_integration")
+async def test_entities_are_unavailable_until_the_device_is_seen(hass):
+    assert hass.states.get("sensor.soil_sensor_battery").state == "unavailable"
 
 
-def test_device_info_identifiers_contain_domain():
-    assert any(DOMAIN in str(i) for i in _make_entity().device_info["identifiers"])
+@pytest.mark.usefixtures("setup_integration", "mock_client")
+async def test_an_advertisement_makes_the_entities_available(hass):
+    inject_advertisement(hass)
+    await hass.async_block_till_done()
 
-
-def test_device_info_identifiers_contain_entry_id():
-    assert any(
-        "my_id" in str(i) for i in _make_entity("my_id").device_info["identifiers"]
-    )
-
-
-def test_coordinator_stored():
-    coord = MagicMock()
-    coord.config_entry.entry_id = "eid"
-    assert TuyaBleEntity(coordinator=coord).coordinator is coord
+    assert hass.states.get("sensor.soil_sensor_battery").state != "unavailable"

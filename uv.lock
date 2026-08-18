@@ -1137,6 +1137,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-homeassistant-custom-component" },
     { name = "serialx" },
+    { name = "tuya-ble-sdk" },
 ]
 lint = [
     { name = "mypy" },
@@ -1159,6 +1160,7 @@ dev = [
     { name = "pytest-cov", specifier = "==7.1.0" },
     { name = "pytest-homeassistant-custom-component", specifier = "==0.13.354" },
     { name = "serialx", specifier = "==1.8.2" },
+    { name = "tuya-ble-sdk", directory = "../tuya-ble-sdk" },
 ]
 lint = [
     { name = "mypy", specifier = "==2.3.0" },
@@ -2740,6 +2742,38 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a8/4b/29b4ef32e036bb34e4ab51796dd745cdba7ed47ad142a9f4a1eb8e0c744d/tqdm-4.67.1.tar.gz", hash = "sha256:f8aef9c52c08c13a65f30ea34f4e5aac3fd1a34959879d7e59e63027286627f2", size = 169737, upload-time = "2024-11-24T20:12:22.481Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d0/30/dc54f88dd4a2b5dc8a0279bdd7270e735851848b762aeb1c1184ed1f6b14/tqdm-4.67.1-py3-none-any.whl", hash = "sha256:26445eca388f82e72884e0d580d5464cd801a3ea01e63e5601bdff9ba6a48de2", size = 78540, upload-time = "2024-11-24T20:12:19.698Z" },
+]
+
+[[package]]
+name = "tuya-ble-sdk"
+version = "0.1.1"
+source = { directory = "../tuya-ble-sdk" }
+dependencies = [
+    { name = "bleak" },
+    { name = "bleak-retry-connector" },
+    { name = "cryptography" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "bleak", specifier = ">=3.0.0" },
+    { name = "bleak-retry-connector", specifier = ">=4.4.0" },
+    { name = "cryptography", specifier = ">=44.0.0" },
+    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.12.0" },
+]
+provides-extras = ["cli"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pre-commit", specifier = "==4.6.1" },
+    { name = "pytest", specifier = "==9.0.3" },
+    { name = "pytest-asyncio", specifier = "==1.4.0" },
+    { name = "pytest-cov", specifier = "==7.1.0" },
+    { name = "typer", specifier = "==0.20.0" },
+]
+lint = [
+    { name = "mypy", specifier = "==2.3.0" },
+    { name = "ruff", specifier = "==0.16.1" },
 ]
 
 [[package]]

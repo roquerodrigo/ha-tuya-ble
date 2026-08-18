@@ -1,4 +1,4 @@
-"""Typed shape of the credentials persisted on the config entry."""
+"""Typed shape of the device identity persisted on the config entry."""
 
 from __future__ import annotations
 
@@ -6,7 +6,16 @@ from typing import TypedDict
 
 
 class TuyaBleConfigData(TypedDict):
-    """Shape of the credentials persisted on the config entry."""
+    """
+    What one config entry stores about one Tuya BLE device.
 
-    username: str
-    password: str
+    The address and the product id come from the advertisement; the device id
+    and the local key come from the user's Tuya account and are the only
+    secrets involved.
+    """
+
+    address: str
+    product_id: str
+    uuid: str
+    device_id: str
+    local_key: str

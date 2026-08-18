@@ -1,93 +1,100 @@
-"""DataUpdateCoordinator for tuya_ble."""
+"""Bluetooth coordinator for tuya_ble."""
 
 from __future__ import annotations
 
-from datetime import timedelta
 from typing import TYPE_CHECKING
 
-from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
-from homeassistant.util import dt as dt_util
-
-from .const import DOMAIN, LOGGER
-from .exceptions import (
-    TuyaBleApiClientAuthenticationError,
-    TuyaBleApiClientError,
+from homeassistant.components.bluetooth import (
+    BluetoothScanningMode,
+    async_ble_device_from_address,
 )
+from homeassistant.components.bluetooth.active_update_coordinator import (
+    ActiveBluetoothDataUpdateCoordinator,
+)
+from homeassistant.core import CoreState
+from tuya_ble_sdk import TuyaBleAuthenticationError, TuyaBleClient
+
+from .const import LOGGER
 
 if TYPE_CHECKING:
-    from datetime import datetime
-
+    from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
     from homeassistant.core import HomeAssistant
+    from tuya_ble_sdk import TuyaBleCredentials
 
-    from .data import TuyaBleConfigEntry, TuyaBlePost
-
-FAILURE_GRACE_PERIOD = timedelta(minutes=5)
+    from .data import TuyaBleConfigEntry, TuyaBleDataPoints
 
 
-class TuyaBleDataUpdateCoordinator(DataUpdateCoordinator["TuyaBlePost"]):
-    """Coordinator for fetching the sample post from the API."""
+class TuyaBleDataUpdateCoordinator(
+    ActiveBluetoothDataUpdateCoordinator["TuyaBleDataPoints | None"]
+):
+    """
+    Reads one Tuya BLE device whenever it announces that it is awake.
 
-    config_entry: TuyaBleConfigEntry
+    A timer-driven coordinator would mostly poll a device that is asleep: these
+    sensors advertise every few minutes and only listen for a moment
+    afterwards. Home Assistant therefore drives the poll from the
+    advertisement, and ``scan_interval`` becomes the minimum spacing between
+    two reads rather than a schedule.
+    """
 
     def __init__(
         self,
         hass: HomeAssistant,
-        scan_interval: timedelta,
-        config_entry: TuyaBleConfigEntry | None = None,
+        config_entry: TuyaBleConfigEntry,
+        credentials: TuyaBleCredentials,
+        scan_interval_seconds: int,
     ) -> None:
         """Initialize."""
+        self.config_entry = config_entry
+        self._credentials = credentials
+        self._scan_interval_seconds = scan_interval_seconds
         super().__init__(
             hass=hass,
             logger=LOGGER,
-            name=DOMAIN,
-            update_interval=scan_interval,
-            always_update=False,
-            config_entry=config_entry,
+            address=config_entry.data["address"],
+            mode=BluetoothScanningMode.PASSIVE,
+            needs_poll_method=self._needs_poll,
+            poll_method=self._async_poll_device,
+            connectable=True,
         )
-        self._first_failure_at: datetime | None = None
 
-    async def _async_update_data(self) -> TuyaBlePost:
-        """Fetch data from the API, tolerating outages shorter than the grace period."""
-        try:
-            data = await self.config_entry.runtime_data.client.async_get_data()
-        except TuyaBleApiClientAuthenticationError as exception:
-            raise ConfigEntryAuthFailed(exception) from exception
-        except TuyaBleApiClientError as exception:
-            return self._handle_failure(exception)
-
-        self._first_failure_at = None
-        return data
-
-    def _handle_failure(self, exception: TuyaBleApiClientError) -> TuyaBlePost:
-        """
-        Serve the last known data while the outage is shorter than the grace period.
-
-        A single failed poll of a remote API is usually a blip, not an outage,
-        yet raising ``UpdateFailed`` immediately marks every entity of the
-        integration unavailable — which shows up in history, breaks automations
-        and templates that read the state, and resolves itself one poll later.
-        Holding the last known values for a bounded window trades a little
-        staleness for that stability, and a genuine outage still surfaces once
-        the window closes.
-
-        Only failures with data to fall back on are absorbed: before the first
-        successful refresh there is nothing to serve, and an authentication
-        error never reaches here, so re-authentication is still prompted at
-        once. Set ``FAILURE_GRACE_PERIOD`` to ``timedelta(0)`` to opt out.
-        """
-        now = dt_util.utcnow()
-        if self._first_failure_at is None:
-            self._first_failure_at = now
-
-        last_known_data: TuyaBlePost | None = self.data
+    def _needs_poll(
+        self,
+        service_info: BluetoothServiceInfoBleak,
+        seconds_since_last_poll: float | None,
+    ) -> bool:
+        """Decide whether this advertisement is worth waking a connection for."""
+        if self.hass.state is not CoreState.running:
+            return False
         if (
-            last_known_data is not None
-            and now - self._first_failure_at < FAILURE_GRACE_PERIOD
+            seconds_since_last_poll is not None
+            and seconds_since_last_poll < self._scan_interval_seconds
         ):
-            LOGGER.warning(
-                "Failed to fetch data; serving the last known values: %s", exception
+            return False
+        return (
+            async_ble_device_from_address(
+                self.hass, service_info.device.address, connectable=True
             )
-            return last_known_data
+            is not None
+        )
 
-        raise UpdateFailed(exception) from exception
+    async def _async_poll_device(
+        self, service_info: BluetoothServiceInfoBleak
+    ) -> TuyaBleDataPoints:
+        """Run one whole session against the device that just advertised."""
+        device = (
+            async_ble_device_from_address(
+                self.hass, service_info.device.address, connectable=True
+            )
+            or service_info.device
+        )
+        try:
+            data_points = await TuyaBleClient(
+                device, self._credentials
+            ).async_read_data_points()
+        except TuyaBleAuthenticationError as exception:
+            LOGGER.error("Failed to authenticate with the device: %s", exception)
+            self.config_entry.async_start_reauth(self.hass)
+            raise
+        LOGGER.debug("%s: read datapoints %s", self.address, sorted(data_points))
+        return data_points

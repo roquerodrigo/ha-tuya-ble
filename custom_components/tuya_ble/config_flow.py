@@ -2,44 +2,50 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypedDict, cast
 
 import voluptuous as vol
 from homeassistant import config_entries
-from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
+from homeassistant.components.bluetooth import async_discovered_service_info
+from homeassistant.const import CONF_ADDRESS, CONF_DEVICE_ID
 from homeassistant.core import callback
 from homeassistant.helpers import selector
-from homeassistant.helpers.aiohttp_client import async_create_clientsession
-from homeassistant.util import slugify
+from homeassistant.helpers.device_registry import format_mac
+from tuya_ble_sdk import TuyaBleError, parse_advertisement
 
-from .api import TuyaBleApiClient
-from .const import DOMAIN, LOGGER
-from .exceptions import (
-    TuyaBleApiClientAuthenticationError,
-    TuyaBleApiClientCommunicationError,
-    TuyaBleApiClientError,
-)
+from .const import CONF_LOCAL_KEY, DOMAIN, LOGGER, MIN_LOCAL_KEY_LENGTH
 from .options_flow import TuyaBleOptionsFlow
+from .products import product_for
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
+    from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
+
     from .data import TuyaBleConfigData, TuyaBleConfigEntry
+    from .products import TuyaBleProduct
 
 
-def _credentials_schema(default_username: str | None = None) -> vol.Schema:
-    """Build the username/password schema, optionally pre-filled."""
+class TuyaBleCredentialsInput(TypedDict):
+    """The two values the pairing handshake needs from the user."""
+
+    device_id: str
+    local_key: str
+
+
+def _credentials_schema(
+    defaults: TuyaBleCredentialsInput | None = None,
+) -> vol.Schema:
+    """Build the device id / local key schema, optionally pre-filled."""
     return vol.Schema(
         {
             vol.Required(
-                CONF_USERNAME,
-                default=default_username
-                if default_username is not None
-                else vol.UNDEFINED,
+                CONF_DEVICE_ID,
+                default=defaults["device_id"] if defaults else vol.UNDEFINED,
             ): selector.TextSelector(
                 selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT),
             ),
-            vol.Required(CONF_PASSWORD): selector.TextSelector(
+            vol.Required(CONF_LOCAL_KEY): selector.TextSelector(
                 selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
             ),
         },
@@ -47,9 +53,20 @@ def _credentials_schema(default_username: str | None = None) -> vol.Schema:
 
 
 class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
-    """Config flow for Tuya BLE."""
+    """
+    Config flow for Tuya BLE.
+
+    The credentials are not tried against the device while the flow is open:
+    these sensors sleep between advertisements, so a connection attempt would
+    time out far more often than it would catch a typo. A wrong local key
+    surfaces on the first poll instead, as a reauth prompt.
+    """
 
     VERSION = 1
+
+    _address: str
+    _product: TuyaBleProduct
+    _uuid: str
 
     @staticmethod
     @callback
@@ -59,121 +76,190 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         """Return the options flow handler."""
         return TuyaBleOptionsFlow()
 
-    # The narrowed ``TuyaBleConfigData`` parameter is intentional
-    # — HA's base class declares ``dict[str, Any] | None`` here, and we trade
-    # strict LSP compliance for stronger typing of our own user_input schema.
-    async def async_step_user(  # type: ignore[override]
+    async def async_step_bluetooth(
         self,
-        user_input: TuyaBleConfigData | None = None,
+        discovery_info: BluetoothServiceInfoBleak,
     ) -> config_entries.ConfigFlowResult:
-        """Handle the initial step."""
+        """Handle a device discovered by the Bluetooth integration."""
+        await self.async_set_unique_id(format_mac(discovery_info.address))
+        self._abort_if_unique_id_configured()
+        if not self._adopt(discovery_info):
+            return self.async_abort(reason="not_supported")
+        self.context["title_placeholders"] = {"name": self._product.name}
+        return await self.async_step_bluetooth_confirm()
+
+    async def async_step_bluetooth_confirm(
+        self,
+        user_input: TuyaBleCredentialsInput | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Ask for the credentials that pair this device."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            errors = await self._validate(user_input)
+            errors = _validate(user_input)
             if not errors:
-                await self.async_set_unique_id(slugify(user_input["username"]))
-                self._abort_if_unique_id_configured()
                 return self.async_create_entry(
-                    title=user_input["username"],
-                    data=user_input,
+                    title=self._product.name,
+                    data=cast(
+                        "TuyaBleConfigData",
+                        {
+                            CONF_ADDRESS: self._address,
+                            "product_id": self._product.product_id,
+                            "uuid": self._uuid,
+                            CONF_DEVICE_ID: user_input["device_id"].strip(),
+                            CONF_LOCAL_KEY: user_input["local_key"].strip(),
+                        },
+                    ),
                 )
 
         return self.async_show_form(
-            step_id="user",
-            data_schema=_credentials_schema(
-                default_username=user_input["username"] if user_input else None,
-            ),
+            step_id="bluetooth_confirm",
+            data_schema=_credentials_schema(user_input),
+            description_placeholders={"name": self._product.name},
             errors=errors,
+        )
+
+    async def async_step_user(
+        self,
+        user_input: Mapping[str, str] | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Let the user pick one of the supported devices seen nearby."""
+        candidates = self._candidates()
+        if not candidates:
+            return self.async_abort(reason="no_devices_found")
+
+        if user_input is not None:
+            discovery_info = candidates[user_input[CONF_ADDRESS]]
+            await self.async_set_unique_id(
+                format_mac(discovery_info.address), raise_on_progress=False
+            )
+            self._abort_if_unique_id_configured()
+            if not self._adopt(discovery_info):
+                return self.async_abort(reason="not_supported")
+            return await self.async_step_bluetooth_confirm()
+
+        return self.async_show_form(
+            step_id="user",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(CONF_ADDRESS): vol.In(
+                        {
+                            address: f"{info.name} ({address})"
+                            for address, info in candidates.items()
+                        }
+                    )
+                }
+            ),
         )
 
     async def async_step_reauth(
         self,
         entry_data: Mapping[str, str],  # noqa: ARG002
     ) -> config_entries.ConfigFlowResult:
-        """Trigger reauth when the API rejects stored credentials."""
+        """Trigger reauth when the device rejects the stored local key."""
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self,
-        user_input: TuyaBleConfigData | None = None,
+        user_input: TuyaBleCredentialsInput | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Prompt the user for new credentials and update the entry."""
-        errors: dict[str, str] = {}
-        entry = self._get_reauth_entry()
-        existing = cast("TuyaBleConfigData", entry.data)
-
-        if user_input is not None:
-            errors = await self._validate(user_input)
-            if not errors:
-                await self.async_set_unique_id(slugify(user_input["username"]))
-                self._abort_if_unique_id_mismatch()
-                return self.async_update_reload_and_abort(
-                    entry,
-                    data_updates=dict(user_input),
-                )
-
-        return self.async_show_form(
-            step_id="reauth_confirm",
-            data_schema=_credentials_schema(
-                default_username=existing.get("username"),
-            ),
-            errors=errors,
-        )
+        """Prompt for a fresh local key and update the entry."""
+        return await self._async_update_credentials("reauth_confirm", user_input)
 
     async def async_step_reconfigure(
         self,
-        user_input: TuyaBleConfigData | None = None,
+        user_input: TuyaBleCredentialsInput | None = None,
     ) -> config_entries.ConfigFlowResult:
-        """Allow editing credentials of an existing entry."""
+        """Allow editing the credentials of an existing entry."""
+        return await self._async_update_credentials("reconfigure", user_input)
+
+    async def _async_update_credentials(
+        self,
+        step_id: str,
+        user_input: TuyaBleCredentialsInput | None,
+    ) -> config_entries.ConfigFlowResult:
+        """Re-ask for the credentials of an entry that already exists."""
         errors: dict[str, str] = {}
-        entry = self._get_reconfigure_entry()
+        entry = (
+            self._get_reauth_entry()
+            if step_id == "reauth_confirm"
+            else self._get_reconfigure_entry()
+        )
         existing = cast("TuyaBleConfigData", entry.data)
 
         if user_input is not None:
-            errors = await self._validate(user_input)
+            errors = _validate(user_input)
             if not errors:
-                await self.async_set_unique_id(slugify(user_input["username"]))
-                self._abort_if_unique_id_mismatch()
                 return self.async_update_reload_and_abort(
                     entry,
-                    data_updates=dict(user_input),
+                    data_updates={
+                        CONF_DEVICE_ID: user_input["device_id"].strip(),
+                        CONF_LOCAL_KEY: user_input["local_key"].strip(),
+                    },
                 )
 
         return self.async_show_form(
-            step_id="reconfigure",
+            step_id=step_id,
             data_schema=_credentials_schema(
-                default_username=existing.get("username"),
+                user_input
+                or TuyaBleCredentialsInput(
+                    device_id=existing["device_id"], local_key=""
+                )
             ),
             errors=errors,
         )
 
-    async def _validate(
-        self,
-        user_input: TuyaBleConfigData,
-    ) -> dict[str, str]:
-        """Test credentials and return an errors dict (empty on success)."""
+    def _adopt(self, discovery_info: BluetoothServiceInfoBleak) -> bool:
+        """Read the advertisement and keep it, unless the product is unknown."""
         try:
-            await self._test_credentials(
-                username=user_input["username"],
-                password=user_input["password"],
+            advertisement = parse_advertisement(
+                discovery_info.service_data, discovery_info.manufacturer_data
             )
-        except TuyaBleApiClientAuthenticationError as exception:
-            LOGGER.warning("Failed to authenticate: %s", exception)
-            return {"base": "auth"}
-        except TuyaBleApiClientCommunicationError as exception:
-            LOGGER.error("Failed to connect to the API: %s", exception)
-            return {"base": "connection"}
-        except TuyaBleApiClientError:
-            LOGGER.exception("Failed to validate credentials")
-            return {"base": "unknown"}
-        return {}
+        except TuyaBleError as exception:
+            LOGGER.debug("Failed to read the advertisement: %s", exception)
+            return False
+        product = product_for(advertisement.product_id)
+        if product is None or advertisement.uuid is None:
+            return False
+        self._address = discovery_info.address
+        self._product = product
+        self._uuid = advertisement.uuid
+        return True
 
-    async def _test_credentials(self, username: str, password: str) -> None:
-        """Validate credentials against the API."""
-        client = TuyaBleApiClient(
-            username=username,
-            password=password,
-            session=async_create_clientsession(self.hass),
+    def _candidates(self) -> dict[str, BluetoothServiceInfoBleak]:
+        """Return the supported devices seen nearby that are not set up yet."""
+        configured = self._async_current_ids()
+        return {
+            discovery_info.address: discovery_info
+            for discovery_info in async_discovered_service_info(
+                self.hass, connectable=True
+            )
+            if format_mac(discovery_info.address) not in configured
+            and _is_supported(discovery_info)
+        }
+
+
+def _is_supported(discovery_info: BluetoothServiceInfoBleak) -> bool:
+    """Report whether this advertisement belongs to a product we can talk to."""
+    try:
+        advertisement = parse_advertisement(
+            discovery_info.service_data, discovery_info.manufacturer_data
         )
-        await client.async_get_data()
+    except TuyaBleError:
+        return False
+    return product_for(advertisement.product_id) is not None
+
+
+def _validate(user_input: TuyaBleCredentialsInput) -> dict[str, str]:
+    """
+    Reject credentials that cannot possibly work, before anything is stored.
+
+    Only the shape is checked here; whether the device accepts them is decided
+    on the first poll, when it is awake.
+    """
+    errors: dict[str, str] = {}
+    if not user_input["device_id"].strip():
+        errors[CONF_DEVICE_ID] = "invalid_device_id"
+    if len(user_input["local_key"].strip()) < MIN_LOCAL_KEY_LENGTH:
+        errors[CONF_LOCAL_KEY] = "invalid_local_key"
+    return errors

@@ -1,70 +1,80 @@
 {
     "config": {
+        "flow_title": "{name}",
         "step": {
             "user": {
                 "title": "Configurar Tuya BLE",
-                "description": "Informe suas credenciais para conectar à API.",
+                "description": "Escolha o dispositivo Tuya BLE que deseja adicionar.",
                 "data": {
-                    "username": "Usuário",
-                    "password": "Senha"
+                    "address": "Dispositivo"
+                }
+            },
+            "bluetooth_confirm": {
+                "title": "Configurar {name}",
+                "description": "Informe o device id e a local key deste dispositivo. Os dois aparecem na sua conta Tuya.",
+                "data": {
+                    "device_id": "Device id",
+                    "local_key": "Local key"
                 }
             },
             "reauth_confirm": {
                 "title": "Re-autenticar Tuya BLE",
-                "description": "Suas credenciais não são mais válidas. Informe as credenciais atualizadas.",
+                "description": "O dispositivo recusou a local key armazenada. Refaça o pareamento no app da Tuya e informe os valores atuais.",
                 "data": {
-                    "username": "Usuário",
-                    "password": "Senha"
+                    "device_id": "Device id",
+                    "local_key": "Local key"
                 }
             },
             "reconfigure": {
                 "title": "Reconfigurar Tuya BLE",
-                "description": "Atualize as credenciais desta entrada.",
+                "description": "Atualize as credenciais deste dispositivo.",
                 "data": {
-                    "username": "Usuário",
-                    "password": "Senha"
+                    "device_id": "Device id",
+                    "local_key": "Local key"
                 }
             }
         },
         "error": {
-            "auth": "Usuário ou senha incorretos.",
-            "connection": "Não foi possível conectar ao servidor.",
-            "unknown": "Ocorreu um erro desconhecido."
+            "invalid_device_id": "Informe o device id da sua conta Tuya.",
+            "invalid_local_key": "A local key é curta demais para ser válida."
         },
         "abort": {
-            "already_configured": "Esta conta já está configurada.",
+            "already_configured": "Este dispositivo já está configurado.",
+            "no_devices_found": "Nenhum dispositivo Tuya BLE compatível foi encontrado por perto.",
+            "not_supported": "Este dispositivo não é suportado pela integração.",
             "reauth_successful": "Re-autenticação concluída com sucesso.",
             "reconfigure_successful": "Reconfiguração concluída com sucesso.",
-            "unique_id_mismatch": "A conta não corresponde à usada na configuração desta entrada."
+            "unique_id_mismatch": "O dispositivo não corresponde ao usado na configuração desta entrada."
         }
     },
     "options": {
         "step": {
             "init": {
                 "title": "Opções do Tuya BLE",
-                "description": "Ajuste polling e outros comportamentos desta entrada.",
+                "description": "O dispositivo é lido no máximo uma vez por intervalo, na próxima vez que ele se anunciar.",
                 "data": {
-                    "scan_interval": "Intervalo de polling (segundos)"
+                    "scan_interval": "Intervalo mínimo entre leituras (segundos)"
                 }
             }
         }
     },
     "entity": {
         "sensor": {
-            "title": {
-                "name": "Título"
-            }
-        }
-    },
-    "issues": {
-        "deprecated_api": {
-            "title": "Endpoint da API depreciado em uso",
-            "fix_flow": {
-                "step": {
-                    "confirm": {
-                        "title": "Migrar para a API suportada",
-                        "description": "O endpoint usado por esta integração foi depreciado. Clique em enviar para confirmar; atualize a configuração da integração para usar o novo endpoint."
-                    }
+            "soil_moisture": {
+                "name": "Umidade do solo"
+            },
+            "temperature": {
+                "name": "Temperatura"
+            },
+            "battery": {
+                "name": "Bateria"
+            },
+            "battery_state": {
+                "name": "Estado da bateria",
+                "state": {
+                    "low": "Baixo",
+                    "middle": "Médio",
+                    "high": "Alto"
                 }
             }
         }
