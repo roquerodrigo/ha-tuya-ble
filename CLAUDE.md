@@ -90,9 +90,10 @@ from the advertisement, `uuid` is decrypted from it, and `device_id` /
 ### Config flow surface
 
 - `async_step_bluetooth` — discovery; parses the advertisement, aborts with
-  `not_supported` when the product id is unknown or the uuid cannot be read,
-  and sets the unique id from the formatted MAC.
-- `async_step_bluetooth_confirm` — asks for `device_id` and `local_key`.
+  `not_supported` when the uuid cannot be read, and sets the unique id from the
+  formatted MAC.
+- `async_step_bluetooth_confirm` — asks for `device_id` and `local_key`, plus
+  the product when the advertisement did not name it.
 - `async_step_user` — lists the supported devices seen nearby.
 - `async_step_reauth` / `async_step_reauth_confirm` and
   `async_step_reconfigure` — both re-ask for the credentials through one
@@ -105,10 +106,15 @@ work; a wrong local key surfaces on the first poll as a reauth prompt.
 
 ### Products
 
-`products.py` is the catalogue of supported devices, keyed by the product id
-the advertisement carries. `sensor.py` maps the same key to the entity classes
-that product exposes, so a second device is a table entry rather than a new
-platform.
+`products.py` is the catalogue of supported devices, keyed by product id.
+`sensor.py` maps the same key to the entity classes that product exposes, so a
+second device is a table entry rather than a new platform.
+
+The product id is **not** reliably readable from the air: a device bound to a
+Tuya account broadcasts an obfuscated value in its place (those bytes still
+decrypt the uuid — they are the key material — but they name no product).
+Discovery therefore only requires the uuid, and the product is asked for
+whenever the advertisement did not name it.
 
 ### Diagnostics
 

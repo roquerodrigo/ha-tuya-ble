@@ -38,9 +38,9 @@ handshake, one report, disconnect.
 - A Bluetooth adapter or an [ESPHome Bluetooth proxy](https://esphome.io/components/bluetooth_proxy.html)
   in range of the device, with **active connections** enabled — values are read
   over a GATT connection, not from the advertisement.
-- The device's `device_id` and `local_key`. Both come from the Tuya account that
-  owns the device; the `uuid` and `product_id` are read from the advertisement,
-  so they are not asked for.
+- The device's `device_id` and `local_key`. Both come from the Tuya account
+  that owns the device. The `uuid` needed to pair is read from the
+  advertisement, so it is never asked for.
 
 ## Installation
 
@@ -48,6 +48,10 @@ handshake, one report, disconnect.
 2. Install **Tuya BLE** and restart Home Assistant.
 3. The device is discovered automatically once it advertises; confirm the
    discovery and fill in `device_id` and `local_key`.
+
+A device that is bound to a Tuya account broadcasts an obfuscated value in
+place of its product id, so setup also asks which product it is. An unbound
+device names itself and that question is skipped.
 
 ## Not finished yet
 
