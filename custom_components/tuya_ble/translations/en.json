@@ -79,5 +79,17 @@
                 }
             }
         }
+    },
+    "device": {
+        "soil_sensor": {
+            "name": "Soil sensor"
+        }
+    },
+    "selector": {
+        "product": {
+            "options": {
+                "gvygg3m8": "Soil sensor (SGS01)"
+            }
+        }
     }
 }

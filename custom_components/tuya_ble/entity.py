@@ -22,7 +22,7 @@ class TuyaBleEntity(PassiveBluetoothCoordinatorEntity[TuyaBleDataUpdateCoordinat
         product = self.coordinator.config_entry.runtime_data.product
         return DeviceInfo(
             connections={(CONNECTION_BLUETOOTH, self.coordinator.address)},
-            name=product.name,
+            translation_key=product.translation_key,
             manufacturer=MANUFACTURER,
             model=product.model,
         )
