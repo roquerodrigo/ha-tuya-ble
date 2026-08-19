@@ -237,12 +237,11 @@ Both gates must stay green:
 - `hacs.json` at the repo root pins the minimum HA core via the
   `homeassistant` key. This is the third HA pin (see `CLAUDE.md`).
 - Brand assets live under `custom_components/<domain>/brand/` — `icon.png`,
-  `logo.png` (+ `@2x` variants) and `icon.svg`. The blueprint ships **obvious
-  `TODO` placeholders** (a slate box stamped `TODO / replace me`), not sample
-  artwork: they keep the HACS `brands` check green while making it impossible to
-  mistake them for the real brand. Replace every file per integration and
-  register the assets in
-  [home-assistant/brands](https://github.com/home-assistant/brands).
+  `logo.png` (+ `@2x` variants) and `icon.svg` — and are served from there.
+  The blueprint ships **obvious `TODO` placeholders** (a slate box stamped
+  `TODO / replace me`), not sample artwork, so a fork cannot mistake them for
+  the real brand. Replace every file per integration with the real brand of the
+  device or service being integrated.
 - A `README.md` at the repo root is required; HACS surfaces it as the
   integration description. Its header follows the layout below.
 
