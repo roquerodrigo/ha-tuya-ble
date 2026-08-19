@@ -267,3 +267,27 @@ async def test_a_device_with_nothing_to_report_keeps_the_last_values(
     mock_client.async_read_data_points.return_value = {}
 
     assert await coordinator._async_poll_device(service_info()) == sample_data_points()
+
+
+async def test_a_partial_report_keeps_the_datapoints_it_left_out(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    """The device sends only what it has to say; the rest must not be blanked."""
+    from tuya_ble_sdk import DataPoint, DataPointType
+
+    from .conftest import sample_data_points
+
+    coordinator = _coordinator(setup_integration)
+    mock_client.async_read_data_points.return_value = sample_data_points()
+    coordinator.data = await coordinator._async_poll_device(service_info())
+
+    mock_client.async_read_data_points.return_value = {
+        3: DataPoint(
+            identifier=3, data_type=DataPointType.VALUE, value=51, timestamp=2.0
+        )
+    }
+    merged = await coordinator._async_poll_device(service_info())
+
+    assert merged[3].value == 51
+    assert merged[15].value == 77
+    assert set(merged) == {3, 5, 14, 15}

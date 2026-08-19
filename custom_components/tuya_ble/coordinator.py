@@ -110,7 +110,13 @@ class TuyaBleDataUpdateCoordinator(
     async def _async_poll_device(
         self, service_info: BluetoothServiceInfoBleak
     ) -> TuyaBleDataPoints | None:
-        """Run one whole session against the device that just advertised."""
+        """
+        Run one whole session against the device that just advertised.
+
+        The report is merged over the previous one rather than replacing it:
+        the device sends only the datapoints it has something to say about, so
+        a partial report would otherwise blank every value it left out.
+        """
         device = (
             async_ble_device_from_address(
                 self.hass, service_info.device.address, connectable=True
@@ -133,7 +139,7 @@ class TuyaBleDataUpdateCoordinator(
             LOGGER.debug("%s: nothing new to report", self.address)
             return self.data
         LOGGER.debug("%s: read datapoints %s", self.address, sorted(data_points))
-        return data_points
+        return {**(self.data or {}), **data_points}
 
     def _count_silent_handshake(self) -> None:
         """
