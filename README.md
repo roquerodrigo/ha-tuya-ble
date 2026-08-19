@@ -53,12 +53,6 @@ A device that is bound to a Tuya account broadcasts an obfuscated value in
 place of its product id, so setup also asks which product it is. An unbound
 device names itself and that question is skipped.
 
-## Not finished yet
-
-- The artwork under `custom_components/tuya_ble/brand/` has not been submitted
-  to [home-assistant/brands](https://github.com/home-assistant/brands) yet, so
-  Home Assistant still shows a generic icon for the integration.
-
 ## Development
 
 ```bash

@@ -168,8 +168,8 @@ that never loaded. Home Assistant is pinned to `2026.8.0` in `pyproject.toml` an
   enforced), `icons.json`, `diagnostics.py` (redact `local_key`, include the last
   advertisement via `async_last_service_info`) and `CLAUDE.md`'s architecture
   section.
-- Replace the placeholder artwork in `custom_components/tuya_ble/brand/` and
-  submit the brand to `home-assistant/brands`.
+- Replace the placeholder artwork in `custom_components/tuya_ble/brand/`, which
+  is where the assets are served from.
 - Add a packaging test asserting the SDK pin in `manifest.json` matches the pin in
   the dev dependency group, as `ha-ttlock-ble` does.
 
