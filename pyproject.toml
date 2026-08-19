@@ -26,19 +26,12 @@ dev = [
     "pytest-cov==7.1.0",
     "pytest-homeassistant-custom-component==0.13.354",
     "serialx==1.8.2",
-    "tuya-ble-sdk==0.1.0",
+    "tuya-ble-sdk==0.1.1",
 ]
 lint = [
     "ruff==0.16.1",
     "mypy==2.3.0",
 ]
-
-# TEMPORARY: tuya-ble-sdk has not been published to PyPI yet, so the pin above
-# is resolved from the sibling checkout. Delete this table the moment the SDK's
-# first release lands — with it in place, a clone without that sibling cannot
-# install the development environment.
-[tool.uv.sources]
-tuya-ble-sdk = { path = "../tuya-ble-sdk" }
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
