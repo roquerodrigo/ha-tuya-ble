@@ -110,10 +110,10 @@ async def test_unique_ids_are_derived_from_the_address(hass):
     }
 
     assert unique_ids == {
-        "DC:23:51:E5:D1:3A_soil_moisture",
-        "DC:23:51:E5:D1:3A_temperature",
-        "DC:23:51:E5:D1:3A_battery",
-        "DC:23:51:E5:D1:3A_battery_state",
+        "AA:BB:CC:DD:EE:FF_soil_moisture",
+        "AA:BB:CC:DD:EE:FF_temperature",
+        "AA:BB:CC:DD:EE:FF_battery",
+        "AA:BB:CC:DD:EE:FF_battery_state",
     }
 
 

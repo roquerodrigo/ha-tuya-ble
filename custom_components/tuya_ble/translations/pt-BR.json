@@ -91,5 +91,10 @@
                 "gvygg3m8": "Sensor de solo (SGS01)"
             }
         }
+    },
+    "exceptions": {
+        "unsupported_product": {
+            "message": "O produto {product_id} não é mais suportado por esta integração."
+        }
     }
 }

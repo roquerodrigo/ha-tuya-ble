@@ -53,7 +53,7 @@ def _credentials_schema(
     device that is bound to a Tuya account broadcasts an obfuscated value in
     place of its product id, so nothing in the air says what it is.
     """
-    schema: dict[vol.Marker, object] = {
+    schema: dict[vol.Marker, selector.TextSelector | selector.SelectSelector] = {
         vol.Required(
             CONF_DEVICE_ID,
             default=defaults["device_id"] if defaults else vol.UNDEFINED,
@@ -123,7 +123,7 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             if not errors:
                 product = self._product or SUPPORTED_PRODUCTS[user_input["product_id"]]
                 return self.async_create_entry(
-                    title=product.model,
+                    title=_entry_title(product, self._address),
                     data=cast(
                         "TuyaBleConfigData",
                         {
@@ -190,21 +190,33 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         user_input: TuyaBleCredentialsInput | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Prompt for a fresh local key and update the entry."""
-        return await self._async_update_credentials("reauth_confirm", user_input)
+        return await self._async_update_credentials(
+            "reauth_confirm", "reauth_successful", user_input
+        )
 
     async def async_step_reconfigure(
         self,
         user_input: TuyaBleCredentialsInput | None = None,
     ) -> config_entries.ConfigFlowResult:
         """Allow editing the credentials of an existing entry."""
-        return await self._async_update_credentials("reconfigure", user_input)
+        return await self._async_update_credentials(
+            "reconfigure", "reconfigure_successful", user_input
+        )
 
     async def _async_update_credentials(
         self,
         step_id: str,
+        abort_reason: str,
         user_input: TuyaBleCredentialsInput | None,
     ) -> config_entries.ConfigFlowResult:
-        """Re-ask for the credentials of an entry that already exists."""
+        """
+        Re-ask for the credentials of an entry that already exists.
+
+        The entry is updated and left to the update listener to reload.
+        ``async_update_reload_and_abort`` would schedule a second reload on top
+        of the listener's, which Home Assistant reports as misuse and stops
+        supporting in 2026.12.
+        """
         errors: dict[str, str] = {}
         entry = (
             self._get_reauth_entry()
@@ -216,13 +228,15 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             errors = _validate(user_input)
             if not errors:
-                return self.async_update_reload_and_abort(
+                self.hass.config_entries.async_update_entry(
                     entry,
-                    data_updates={
+                    data={
+                        **entry.data,
                         CONF_DEVICE_ID: user_input["device_id"].strip(),
                         CONF_LOCAL_KEY: user_input["local_key"].strip(),
                     },
                 )
+                return self.async_abort(reason=abort_reason)
 
         return self.async_show_form(
             step_id=step_id,
@@ -255,7 +269,11 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
         self._address = discovery_info.address
         self._product = product_for(advertisement.product_id)
         self._uuid = advertisement.uuid
-        self._name = self._product.model if self._product else discovery_info.address
+        self._name = (
+            _entry_title(self._product, self._address)
+            if self._product
+            else discovery_info.address
+        )
         return True
 
     def _candidates(self) -> dict[str, BluetoothServiceInfoBleak]:
@@ -269,6 +287,17 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             if format_mac(discovery_info.address) not in configured
             and _is_supported(discovery_info)
         }
+
+
+def _entry_title(product: TuyaBleProduct, address: str) -> str:
+    """
+    Name the entry so two of the same product stay tellable apart.
+
+    One entry is one physical device, and the model alone repeats across every
+    unit of it, so the address — the only thing that differs — is part of the
+    title.
+    """
+    return f"{product.model} {address.replace(':', '')[-6:]}"
 
 
 def _is_supported(discovery_info: BluetoothServiceInfoBleak) -> bool:

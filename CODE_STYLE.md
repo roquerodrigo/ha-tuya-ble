@@ -189,10 +189,15 @@ for it — `warn_unused_ignores` turns a stale one into an error.
   auto-discarded on unload, the legacy `hass.data[DOMAIN][entry_id]` pattern is
   not.
 - The coordinator is an
-  `ActiveBluetoothDataUpdateCoordinator[TuyaBleDataPoints | None]`: Bluetooth
-  advertisements drive the poll, not a timer. `entry.async_on_unload(
-  coordinator.async_start())` registers it, and `coordinator.data` is `None`
-  until the first successful reading.
+  `ActiveBluetoothDataUpdateCoordinator[TuyaBleDataPoints | None]`. Its
+  `needs_poll_method` is the single place that decides whether a reading is
+  due, and it is reached from two directions: a Bluetooth advertisement, and a
+  `POLL_CHECK_INTERVAL_SECONDS` timer that re-offers the last advertisement —
+  necessary because Home Assistant suppresses an advertisement identical to the
+  previous one, which is all these devices ever send.
+  `entry.async_on_unload(coordinator.async_start())` registers the first and
+  `entry.async_on_unload(async_track_time_interval(...))` the second;
+  `coordinator.data` is `None` until the first successful reading.
 - Error handling inside the poll method:
   - Authentication errors → call `config_entry.async_start_reauth(hass)` and
     re-raise, so the previous reading is kept and the user is prompted.

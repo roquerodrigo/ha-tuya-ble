@@ -57,19 +57,33 @@ One config entry is one physical device, driven by Bluetooth advertisements:
 ```
 config_flow.py   → reads the advertisement, asks for device_id + local_key
 __init__.py      → builds the coordinator and forwards the sensor platform
-coordinator.py   → polls when the device announces itself; returns the datapoints
+coordinator.py   → polls when a reading is due; returns the datapoints
 sensor.py        → one class per entity, picked from a per-product table
 ```
 
 ### Why the coordinator is not a `DataUpdateCoordinator`
 
 The supported devices are battery powered and only listen for a moment after
-they advertise. A timer-driven coordinator would mostly reach a sleeping
-device, so `coordinator.py` uses `ActiveBluetoothDataUpdateCoordinator`: Home
-Assistant calls `needs_poll_method` on every advertisement, and
+they advertise, so `coordinator.py` uses `ActiveBluetoothDataUpdateCoordinator`:
+Home Assistant calls `needs_poll_method` on every advertisement, and
 `scan_interval` (options flow, default 900 s) becomes the minimum spacing
 between two readings rather than a schedule. The coordinator holds no client —
 `TuyaBleClient` is built per poll, connects, reads one report and disconnects.
+
+**Advertisements alone are not enough**, and this is the non-obvious part.
+Home Assistant returns early from an advertisement whose payload is
+byte-identical to the previous one (`habluetooth.manager`), and these sensors
+broadcast a constant payload — so the callback fires once, when the entry
+loads, and never again. Measured against real hardware, the device was read
+only after a reload, whatever `scan_interval` said. `async_poll_if_due`, wired
+to a `POLL_CHECK_INTERVAL_SECONDS` timer in `async_setup_entry`, therefore
+re-offers the last advertisement to the same `_needs_poll`, which stays the
+single decision point. The timer ticks faster than the interval so a reading is
+not delayed a whole extra cycle by the tick grid.
+
+A reading that returns no datapoint is normal — the device acknowledges the
+request and stays quiet unless it has something to report — so the coordinator
+keeps the previous values instead of surfacing an error.
 
 A `TuyaBleAuthenticationError` from the SDK means the stored local key was
 rejected; the coordinator starts the reauth flow and re-raises.

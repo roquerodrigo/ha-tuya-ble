@@ -6,7 +6,7 @@ from custom_components.tuya_ble.diagnostics import (
     async_get_config_entry_diagnostics,
 )
 
-from .conftest import inject_advertisement
+from .conftest import ADDRESS, inject_advertisement
 
 
 async def test_secrets_are_redacted(hass, setup_integration):
@@ -20,7 +20,7 @@ async def test_secrets_are_redacted(hass, setup_integration):
 async def test_the_address_and_the_product_are_kept(hass, setup_integration):
     payload = await async_get_config_entry_diagnostics(hass, setup_integration)
 
-    assert payload["entry"]["data"]["address"] == "DC:23:51:E5:D1:3A"
+    assert payload["entry"]["data"]["address"] == ADDRESS
     assert payload["entry"]["data"]["product_id"] == "gvygg3m8"
 
 

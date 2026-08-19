@@ -11,7 +11,11 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.loader import async_get_loaded_integration
 from tuya_ble_sdk import TuyaBleCredentials
 
-from .const import DEFAULT_SCAN_INTERVAL_SECONDS, POLL_CHECK_INTERVAL_SECONDS
+from .const import (
+    DEFAULT_SCAN_INTERVAL_SECONDS,
+    DOMAIN,
+    POLL_CHECK_INTERVAL_SECONDS,
+)
 from .coordinator import TuyaBleDataUpdateCoordinator
 from .data import TuyaBleData
 from .products import product_for
@@ -19,7 +23,7 @@ from .products import product_for
 if TYPE_CHECKING:
     from homeassistant.core import HomeAssistant
 
-    from .data import TuyaBleConfigData, TuyaBleConfigEntry
+    from .data import TuyaBleConfigData, TuyaBleConfigEntry, TuyaBleOptionsData
 
 PLATFORMS: list[Platform] = [Platform.SENSOR]
 
@@ -32,8 +36,11 @@ async def async_setup_entry(
     config = cast("TuyaBleConfigData", entry.data)
     product = product_for(config["product_id"])
     if product is None:
-        message = f"Product {config['product_id']} is no longer supported"
-        raise ConfigEntryError(message)
+        raise ConfigEntryError(
+            translation_domain=DOMAIN,
+            translation_key="unsupported_product",
+            translation_placeholders={"product_id": config["product_id"]},
+        )
 
     coordinator = TuyaBleDataUpdateCoordinator(
         hass=hass,
@@ -43,8 +50,8 @@ async def async_setup_entry(
             device_id=config["device_id"],
             local_key=config["local_key"],
         ),
-        scan_interval_seconds=int(
-            entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_SECONDS),
+        scan_interval_seconds=cast("TuyaBleOptionsData", entry.options).get(
+            CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL_SECONDS
         ),
     )
     entry.runtime_data = TuyaBleData(

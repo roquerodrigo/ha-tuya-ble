@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import voluptuous as vol
 from homeassistant.config_entries import ConfigFlowResult, OptionsFlow
@@ -26,7 +26,8 @@ class TuyaBleOptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=dict(user_input))
 
-        current_value: int = self.config_entry.options.get(
+        options = cast("TuyaBleOptionsData", self.config_entry.options)
+        current_value = options.get(
             CONF_SCAN_INTERVAL,
             DEFAULT_SCAN_INTERVAL_SECONDS,
         )

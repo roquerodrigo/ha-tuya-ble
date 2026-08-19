@@ -45,7 +45,7 @@ async def test_discovery_creates_the_entry(hass):
     )
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == "SGS01"
+    assert result["title"] == "SGS01 DDEEFF"
     assert result["data"] == {
         "address": ADDRESS,
         "product_id": "gvygg3m8",
@@ -232,3 +232,30 @@ async def test_reconfigure_replaces_the_credentials(hass, setup_integration):
 
     assert result["reason"] == "reconfigure_successful"
     assert setup_integration.data["device_id"] == "eeeeeeeeeeeeeeee"
+
+
+@pytest.mark.usefixtures("enable_custom_integrations")
+async def test_two_devices_of_one_product_get_distinct_titles(hass):
+    """One entry is one physical device, so the model alone cannot name it."""
+    titles = []
+    for address in ("AA:BB:CC:DD:EE:FF", "AA:BB:CC:11:22:33"):
+        result = await _start_bluetooth_flow(hass, service_info(address=address))
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], CREDENTIALS
+        )
+        titles.append(result["title"])
+
+    assert titles[0] != titles[1]
+
+
+@pytest.mark.usefixtures("enable_custom_integrations", "discovered")
+async def test_the_manual_flow_hides_a_device_already_configured(hass, config_entry):
+    """The picker must not offer a device the user would only fail to add."""
+    config_entry.add_to_hass(hass)
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "no_devices_found"

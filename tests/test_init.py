@@ -68,3 +68,79 @@ async def test_the_device_is_registered_by_its_bluetooth_connection(hass):
     assert device is not None
     assert device.manufacturer == "Tuya"
     assert device.model == "SGS01"
+
+
+async def test_the_clock_drives_a_reading(hass, setup_integration, mock_client):
+    """
+    The timer registration itself must be covered, not just the callback.
+
+    Home Assistant drops a repeated advertisement and these sensors broadcast a
+    constant one, so this registration is the only thing that keeps them
+    updating; without a clock-driven test it can be deleted or misspelled with
+    the suite still green.
+    """
+    from datetime import timedelta
+    from unittest.mock import patch
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    from custom_components.tuya_ble.const import POLL_CHECK_INTERVAL_SECONDS
+
+    from .conftest import service_info
+
+    mock_client.async_read_data_points.reset_mock()
+
+    with (
+        patch(
+            "custom_components.tuya_ble.coordinator.async_last_service_info",
+            return_value=service_info(),
+        ),
+        patch(
+            "custom_components.tuya_ble.coordinator.async_ble_device_from_address",
+            return_value=service_info().device,
+        ),
+    ):
+        async_fire_time_changed(
+            hass,
+            dt_util.utcnow() + timedelta(seconds=POLL_CHECK_INTERVAL_SECONDS + 1),
+        )
+        await hass.async_block_till_done()
+
+    assert mock_client.async_read_data_points.await_count == 1
+
+
+async def test_the_clock_stops_driving_readings_after_unload(
+    hass, setup_integration, mock_client
+):
+    from datetime import timedelta
+    from unittest.mock import patch
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    from custom_components.tuya_ble.const import POLL_CHECK_INTERVAL_SECONDS
+
+    from .conftest import service_info
+
+    await hass.config_entries.async_unload(setup_integration.entry_id)
+    await hass.async_block_till_done()
+    mock_client.async_read_data_points.reset_mock()
+
+    with (
+        patch(
+            "custom_components.tuya_ble.coordinator.async_last_service_info",
+            return_value=service_info(),
+        ),
+        patch(
+            "custom_components.tuya_ble.coordinator.async_ble_device_from_address",
+            return_value=service_info().device,
+        ),
+    ):
+        async_fire_time_changed(
+            hass,
+            dt_util.utcnow() + timedelta(seconds=POLL_CHECK_INTERVAL_SECONDS + 1),
+        )
+        await hass.async_block_till_done()
+
+    assert mock_client.async_read_data_points.await_count == 0

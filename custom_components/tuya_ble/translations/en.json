@@ -91,5 +91,10 @@
                 "gvygg3m8": "Soil sensor (SGS01)"
             }
         }
+    },
+    "exceptions": {
+        "unsupported_product": {
+            "message": "Product {product_id} is no longer supported by this integration."
+        }
     }
 }
