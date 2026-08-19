@@ -9,6 +9,8 @@ LOGGER: Logger = getLogger(__package__)
 DOMAIN = "tuya_ble"
 MANUFACTURER = "Tuya"
 
+PRODUCT_ID_SOIL_SENSOR = "gvygg3m8"
+
 CONF_LOCAL_KEY = "local_key"
 CONF_PRODUCT_ID = "product_id"
 CONF_UUID = "uuid"

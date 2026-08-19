@@ -54,7 +54,7 @@ class TuyaBleDataUpdateCoordinator(
         hass: HomeAssistant,
         config_entry: TuyaBleConfigEntry,
         credentials: TuyaBleCredentials,
-        scan_interval_seconds: int,
+        scan_interval_seconds: float,
     ) -> None:
         """Initialize."""
         self.config_entry = config_entry

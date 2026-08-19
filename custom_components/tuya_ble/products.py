@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from types import MappingProxyType
 from typing import TYPE_CHECKING
 
+from .const import PRODUCT_ID_SOIL_SENSOR
+
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
@@ -28,8 +30,8 @@ class TuyaBleProduct:
 
 SUPPORTED_PRODUCTS: Mapping[str, TuyaBleProduct] = MappingProxyType(
     {
-        "gvygg3m8": TuyaBleProduct(
-            product_id="gvygg3m8",
+        PRODUCT_ID_SOIL_SENSOR: TuyaBleProduct(
+            product_id=PRODUCT_ID_SOIL_SENSOR,
             translation_key="soil_sensor",
             model="SGS01",
         ),

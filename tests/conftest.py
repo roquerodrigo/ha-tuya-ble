@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
 pytest_plugins = "pytest_homeassistant_custom_component"
 
-ADDRESS = "DC:23:51:E5:D1:3A"
+ADDRESS = "AA:BB:CC:DD:EE:FF"
 PRODUCT_ID = "gvygg3m8"
 UUID = "0123456789abcdef"
 DEVICE_ID = "dddddddddddddddd"
@@ -54,7 +54,7 @@ def encrypted_uuid_for(product_record: bytes, uuid: str = UUID) -> bytes:
     return encrypt(key, key, uuid.encode())
 
 
-OBFUSCATED_PRODUCT_RECORD = bytes.fromhex("5bdcee4a9b776f7a")
+OBFUSCATED_PRODUCT_RECORD = bytes.fromhex("00112233445566ff")
 
 
 def service_info(

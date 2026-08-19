@@ -22,12 +22,12 @@ Confirmed live before this plan was written — the sensor advertises and is
 reachable:
 
 ```
-address           DC:23:51:E5:D1:3A
+address           <the sensor's MAC>
 name              TY
 rssi              -67           (via an ESPHome Bluetooth proxy, connectable)
 service_uuids     0000a201-0000-1000-8000-00805f9b34fb
 service_data      00 6776796767336d38          -> type 0, product_id "gvygg3m8"
-manufacturer_data 0x07D0: 00 03 0000 0100 76501fe0c0c45d17bced82a6fdd33459
+manufacturer_data 0x07D0: 00 03 0000 0100 <16 bytes, encrypted uuid>
                           ^     ^         ^ encrypted uuid (16 bytes)
                           |     protocol version 3
                           bit 0x80 = bound flag

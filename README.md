@@ -26,12 +26,17 @@ a table entry, not a new platform.
 
 ## How it reads the device
 
-These sensors are battery powered and sleep between advertisements — they only
-listen for a moment after announcing themselves. Home Assistant therefore
-triggers a reading **when the device advertises**, not on a timer, and the
-polling interval in the integration's options is the *minimum* spacing between
-two readings (15 minutes by default). Each reading is one short connection:
-handshake, one report, disconnect.
+These sensors are battery powered and only listen for a moment after announcing
+themselves, so a reading is taken right after the device announces itself
+rather than at an arbitrary moment. Home Assistant suppresses an advertisement
+identical to the one before it, and these sensors broadcast a constant one, so
+the integration also re-checks every 30 seconds whether a reading is due.
+
+Either way the decision is the same: the polling interval in the integration's
+options is the *minimum* spacing between two readings (15 minutes by default),
+never a guarantee of one. Each reading is one short connection — handshake, one
+report, disconnect — and the device often has nothing new to say, in which case
+the previous values are kept.
 
 ## Requirements
 
