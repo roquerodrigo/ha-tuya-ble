@@ -1160,7 +1160,7 @@ dev = [
     { name = "pytest-cov", specifier = "==7.1.0" },
     { name = "pytest-homeassistant-custom-component", specifier = "==0.13.354" },
     { name = "serialx", specifier = "==1.8.2" },
-    { name = "tuya-ble-sdk", directory = "../tuya-ble-sdk" },
+    { name = "tuya-ble-sdk", specifier = "==0.1.1" },
 ]
 lint = [
     { name = "mypy", specifier = "==2.3.0" },
@@ -2746,34 +2746,16 @@ wheels = [
 
 [[package]]
 name = "tuya-ble-sdk"
-version = "0.1.0"
-source = { directory = "../tuya-ble-sdk" }
+version = "0.1.1"
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bleak" },
     { name = "bleak-retry-connector" },
     { name = "cryptography" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "bleak", specifier = ">=3.0.0" },
-    { name = "bleak-retry-connector", specifier = ">=4.4.0" },
-    { name = "cryptography", specifier = ">=44.0.0" },
-    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.12.0" },
-]
-provides-extras = ["cli"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pre-commit", specifier = "==4.6.1" },
-    { name = "pytest", specifier = "==9.0.3" },
-    { name = "pytest-asyncio", specifier = "==1.4.0" },
-    { name = "pytest-cov", specifier = "==7.1.0" },
-    { name = "typer", specifier = "==0.20.0" },
-]
-lint = [
-    { name = "mypy", specifier = "==2.3.0" },
-    { name = "ruff", specifier = "==0.16.1" },
+sdist = { url = "https://files.pythonhosted.org/packages/44/4f/b441773862c000219c55d70a49734a13a469adf0048a41ee75391d463545/tuya_ble_sdk-0.1.1.tar.gz", hash = "sha256:d87d0d1a916fc0750280632715eaddaaaea4f8938468316f8c0790921ae91e59", size = 91390, upload-time = "2026-08-19T01:33:42.906Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e1/d1/91452b5f4680407324573b85137a90501a1607adb63984ddd9f49b95855b/tuya_ble_sdk-0.1.1-py3-none-any.whl", hash = "sha256:bdebb171ddbb7492a285d5603df8e74d03a7c714ed8a3abd9fe966343bc0917b", size = 29127, upload-time = "2026-08-19T01:33:41.77Z" },
 ]
 
 [[package]]
