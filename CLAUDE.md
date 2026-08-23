@@ -55,7 +55,8 @@ Verify the pairing on PyPI before committing: the `requires_dist` of `pytest-hom
 One config entry is one physical device, driven by Bluetooth advertisements:
 
 ```
-config_flow.py   → reads the advertisement, asks for device_id + local_key
+config_flow.py   → reads the advertisement, then reads device_id + local_key
+                   from the Tuya account (account.py) or asks for them
 __init__.py      → builds the coordinator and forwards the sensor platform
 coordinator.py   → polls when a reading is due; returns the datapoints
 sensor.py        → one class per entity, picked from a per-product table
@@ -106,12 +107,19 @@ from the advertisement, `uuid` is decrypted from it, and `device_id` /
 - `async_step_bluetooth` — discovery; parses the advertisement, aborts with
   `not_supported` when the uuid cannot be read, and sets the unique id from the
   formatted MAC.
-- `async_step_bluetooth_confirm` — asks for `device_id` and `local_key`, plus
-  the product when the advertisement did not name it.
+- `async_step_bluetooth_confirm` — a menu between the two ways to hand over the
+  credentials: `account` and `manual`.
+- `async_step_account` — signs into the Tuya account through `account.py` and
+  reads `device_id`, `local_key` and the product from the record whose uuid (or
+  MAC) matches the device. The account credentials are used for that one lookup
+  and never written to the entry.
+- `async_step_manual` — asks for `device_id` and `local_key`, plus the product
+  when neither the advertisement nor the account named it.
 - `async_step_user` — lists the supported devices seen nearby.
 - `async_step_reauth` / `async_step_reauth_confirm` and
-  `async_step_reconfigure` — both re-ask for the credentials through one
-  `_async_update_credentials` helper.
+  `async_step_reconfigure` — the same menu, adopting the device from the entry
+  first; both funnel into `_async_store`, which updates the entry instead of
+  creating one.
 
 The credentials are **not** tried against the device while the flow is open: it
 is asleep most of the time, so a connection attempt would time out far more

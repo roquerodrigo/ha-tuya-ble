@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
+from .account_credentials import TuyaBleAccountCredentials
 from .config_data import TuyaBleConfigData
 from .diagnostics_entry import TuyaBleDiagnosticsEntry
 from .diagnostics_payload import TuyaBleDiagnosticsPayload
@@ -27,6 +28,7 @@ __all__ = [
     "JsonObject",
     "JsonPrimitive",
     "JsonValue",
+    "TuyaBleAccountCredentials",
     "TuyaBleConfigData",
     "TuyaBleConfigEntry",
     "TuyaBleData",

@@ -44,19 +44,32 @@ the previous values are kept.
   in range of the device, with **active connections** enabled — values are read
   over a GATT connection, not from the advertisement.
 - The device's `device_id` and `local_key`. Both come from the Tuya account
-  that owns the device. The `uuid` needed to pair is read from the
-  advertisement, so it is never asked for.
+  that owns the device, and setup can read them from it for you — you sign in
+  with the e-mail and password of the Tuya app, or enter the two values
+  yourself. The `uuid` needed to pair is read from the advertisement, so it is
+  never asked for.
 
 ## Installation
 
 1. Add this repository to HACS as a custom repository (category *Integration*).
 2. Install **Tuya BLE** and restart Home Assistant.
-3. The device is discovered automatically once it advertises; confirm the
-   discovery and fill in `device_id` and `local_key`.
+3. The device is discovered automatically once it advertises. Confirm the
+   discovery and choose how to hand over the credentials:
+   - **Use my Tuya account** — sign in with the e-mail, password, country code
+     and region of the Tuya app account the device is bound to. The device id
+     and the local key are read from the account, and the account credentials
+     are used once and never stored.
+   - **Enter the credentials myself** — type the `device_id` and the
+     `local_key` as they appear in your Tuya account.
 
 A device that is bound to a Tuya account broadcasts an obfuscated value in
-place of its product id, so setup also asks which product it is. An unbound
-device names itself and that question is skipped.
+place of its product id. The account knows which product it is; when the
+credentials are typed in, setup asks. An unbound device names itself and the
+question is skipped either way.
+
+Re-authentication and reconfiguration offer the same choice, so a local key
+that changed after re-pairing can be picked up from the account instead of
+copied by hand.
 
 ## Development
 
