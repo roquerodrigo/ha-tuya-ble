@@ -7,13 +7,29 @@ from typing import TYPE_CHECKING, NotRequired, TypedDict, cast
 import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.components.bluetooth import async_discovered_service_info
-from homeassistant.const import CONF_ADDRESS, CONF_DEVICE_ID
+from homeassistant.const import (
+    CONF_ADDRESS,
+    CONF_DEVICE_ID,
+    CONF_EMAIL,
+    CONF_PASSWORD,
+    CONF_REGION,
+)
 from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.device_registry import format_mac
-from tuya_ble_sdk import TuyaBleError, parse_advertisement
+from tuya_ble_sdk import (
+    DEFAULT_REGION,
+    REGIONS,
+    TuyaBleAuthenticationError,
+    TuyaBleCloudError,
+    TuyaBleConnectionError,
+    TuyaBleError,
+    parse_advertisement,
+)
 
+from .account import TuyaBleAccount
 from .const import (
+    CONF_COUNTRY_CODE,
     CONF_LOCAL_KEY,
     CONF_PRODUCT_ID,
     CONF_UUID,
@@ -28,17 +44,57 @@ if TYPE_CHECKING:
     from collections.abc import Mapping
 
     from homeassistant.components.bluetooth import BluetoothServiceInfoBleak
+    from tuya_ble_sdk import CloudDevice
 
-    from .data import TuyaBleConfigData, TuyaBleConfigEntry
+    from .data import (
+        TuyaBleAccountCredentials,
+        TuyaBleConfigData,
+        TuyaBleConfigEntry,
+    )
     from .products import TuyaBleProduct
+
+_PAIRING_METHODS = ["account", "manual"]
 
 
 class TuyaBleCredentialsInput(TypedDict):
-    """What the setup form collects: the credentials, and sometimes the product."""
+    """What the manual form collects: the credentials, and sometimes the product."""
 
     device_id: str
     local_key: str
     product_id: NotRequired[str]
+
+
+def _account_schema(defaults: TuyaBleAccountCredentials | None = None) -> vol.Schema:
+    """Build the account form, keeping what the user already typed."""
+    return vol.Schema(
+        {
+            vol.Required(
+                CONF_EMAIL,
+                default=defaults["email"] if defaults else vol.UNDEFINED,
+            ): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.EMAIL),
+            ),
+            vol.Required(CONF_PASSWORD): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD),
+            ),
+            vol.Required(
+                CONF_COUNTRY_CODE,
+                default=defaults["country_code"] if defaults else vol.UNDEFINED,
+            ): selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT),
+            ),
+            vol.Required(
+                CONF_REGION,
+                default=defaults["region"] if defaults else DEFAULT_REGION,
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=list(REGIONS),
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    translation_key="region",
+                ),
+            ),
+        },
+    )
 
 
 def _credentials_schema(
@@ -47,7 +103,7 @@ def _credentials_schema(
     ask_for_product: bool = False,
 ) -> vol.Schema:
     """
-    Build the setup schema, optionally pre-filled.
+    Build the manual schema, optionally pre-filled.
 
     The product is only asked for when the advertisement did not name it: a
     device that is bound to a Tuya account broadcasts an obfuscated value in
@@ -78,10 +134,12 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     """
     Config flow for Tuya BLE.
 
-    The credentials are not tried against the device while the flow is open:
-    these sensors sleep between advertisements, so a connection attempt would
-    time out far more often than it would catch a typo. A wrong local key
-    surfaces on the first poll instead, as a reauth prompt.
+    The credentials reach the entry one of two ways: read from the Tuya
+    account the device is bound to, or typed in. Either way they are not tried
+    against the device while the flow is open — these sensors sleep between
+    advertisements, so a connection attempt would time out far more often than
+    it would catch a typo. A wrong local key surfaces on the first poll
+    instead, as a reauth prompt.
     """
 
     VERSION = 1
@@ -90,6 +148,7 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
     _product: TuyaBleProduct | None
     _uuid: str
     _name: str
+    _entry: config_entries.ConfigEntry | None = None
 
     @staticmethod
     @callback
@@ -113,36 +172,13 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_bluetooth_confirm(
         self,
-        user_input: TuyaBleCredentialsInput | None = None,
+        user_input: TuyaBleCredentialsInput | None = None,  # noqa: ARG002
     ) -> config_entries.ConfigFlowResult:
-        """Ask for the credentials that pair this device."""
-        errors: dict[str, str] = {}
-
-        if user_input is not None:
-            errors = _validate(user_input)
-            if not errors:
-                product = self._product or SUPPORTED_PRODUCTS[user_input["product_id"]]
-                return self.async_create_entry(
-                    title=_entry_title(product, self._address),
-                    data=cast(
-                        "TuyaBleConfigData",
-                        {
-                            CONF_ADDRESS: self._address,
-                            CONF_PRODUCT_ID: product.product_id,
-                            CONF_UUID: self._uuid,
-                            CONF_DEVICE_ID: user_input["device_id"].strip(),
-                            CONF_LOCAL_KEY: user_input["local_key"].strip(),
-                        },
-                    ),
-                )
-
-        return self.async_show_form(
+        """Ask where the credentials that pair this device should come from."""
+        return self.async_show_menu(
             step_id="bluetooth_confirm",
-            data_schema=_credentials_schema(
-                user_input, ask_for_product=self._product is None
-            ),
+            menu_options=_PAIRING_METHODS,
             description_placeholders={"name": self._name},
-            errors=errors,
         )
 
     async def async_step_user(
@@ -178,6 +214,59 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             ),
         )
 
+    async def async_step_account(
+        self,
+        user_input: TuyaBleAccountCredentials | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Read the credentials of this device off the Tuya account."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            device, errors = await self._async_lookup(user_input)
+            if device is not None:
+                product = self._product or product_for(device.product_id)
+                if product is None:
+                    errors = {"base": "unsupported_product"}
+                else:
+                    return self._async_store(
+                        product, device.device_id, device.local_key
+                    )
+
+        return self.async_show_form(
+            step_id="account",
+            data_schema=_account_schema(user_input),
+            description_placeholders={"name": self._name},
+            errors=errors,
+        )
+
+    async def async_step_manual(
+        self,
+        user_input: TuyaBleCredentialsInput | None = None,
+    ) -> config_entries.ConfigFlowResult:
+        """Take the credentials of this device as the user copied them."""
+        errors: dict[str, str] = {}
+        ask_for_product = self._product is None
+
+        if user_input is not None:
+            errors = _validate(user_input)
+            if not errors:
+                product = self._product or SUPPORTED_PRODUCTS[user_input["product_id"]]
+                return self._async_store(
+                    product,
+                    user_input["device_id"].strip(),
+                    user_input["local_key"].strip(),
+                )
+
+        return self.async_show_form(
+            step_id="manual",
+            data_schema=_credentials_schema(
+                user_input or self._known_credentials(),
+                ask_for_product=ask_for_product,
+            ),
+            description_placeholders={"name": self._name},
+            errors=errors,
+        )
+
     async def async_step_reauth(
         self,
         entry_data: Mapping[str, str],  # noqa: ARG002
@@ -187,75 +276,106 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth_confirm(
         self,
-        user_input: TuyaBleCredentialsInput | None = None,
+        user_input: TuyaBleCredentialsInput | None = None,  # noqa: ARG002
     ) -> config_entries.ConfigFlowResult:
-        """Prompt for a fresh local key and update the entry."""
-        return await self._async_update_credentials(
-            "reauth_confirm", "reauth_successful", user_input
+        """Ask where the fresh credentials should come from."""
+        self._adopt_entry(self._get_reauth_entry())
+        return self.async_show_menu(
+            step_id="reauth_confirm",
+            menu_options=_PAIRING_METHODS,
+            description_placeholders={"name": self._name},
         )
 
     async def async_step_reconfigure(
         self,
-        user_input: TuyaBleCredentialsInput | None = None,
+        user_input: TuyaBleCredentialsInput | None = None,  # noqa: ARG002
     ) -> config_entries.ConfigFlowResult:
-        """Allow editing the credentials of an existing entry."""
-        return await self._async_update_credentials(
-            "reconfigure", "reconfigure_successful", user_input
+        """Ask where the credentials of an existing entry should come from."""
+        self._adopt_entry(self._get_reconfigure_entry())
+        return self.async_show_menu(
+            step_id="reconfigure",
+            menu_options=_PAIRING_METHODS,
+            description_placeholders={"name": self._name},
         )
 
-    async def _async_update_credentials(
-        self,
-        step_id: str,
-        abort_reason: str,
-        user_input: TuyaBleCredentialsInput | None,
+    async def _async_lookup(
+        self, credentials: TuyaBleAccountCredentials
+    ) -> tuple[CloudDevice | None, dict[str, str]]:
+        """Ask the account about this device, translating what can go wrong."""
+        account = TuyaBleAccount(self.hass, credentials)
+        try:
+            device = await account.async_device_at(self._uuid, self._address)
+        except TuyaBleAuthenticationError as exception:
+            LOGGER.warning("The Tuya account rejected the credentials: %s", exception)
+            return None, {"base": "invalid_auth"}
+        except TuyaBleConnectionError as exception:
+            LOGGER.error("Failed to reach the Tuya account: %s", exception)
+            return None, {"base": "cannot_connect"}
+        except TuyaBleCloudError as exception:
+            LOGGER.warning("The Tuya account refused the lookup: %s", exception)
+            return None, {"base": "account_busy"}
+        except TuyaBleError:
+            LOGGER.exception("Failed to read the Tuya account")
+            return None, {"base": "unknown"}
+        if device is None:
+            return None, {"base": "device_not_in_account"}
+        return device, {}
+
+    def _async_store(
+        self, product: TuyaBleProduct, device_id: str, local_key: str
     ) -> config_entries.ConfigFlowResult:
         """
-        Re-ask for the credentials of an entry that already exists.
+        Create the entry, or update the one this flow was started for.
 
-        The entry is updated and left to the update listener to reload.
+        An existing entry is left to the update listener to reload.
         ``async_update_reload_and_abort`` would schedule a second reload on top
         of the listener's, which Home Assistant reports as misuse and stops
         supporting in 2026.12.
         """
-        errors: dict[str, str] = {}
-        entry = (
-            self._get_reauth_entry()
-            if step_id == "reauth_confirm"
-            else self._get_reconfigure_entry()
-        )
-        existing = cast("TuyaBleConfigData", entry.data)
+        if self._entry is not None:
+            self.hass.config_entries.async_update_entry(
+                self._entry,
+                data={
+                    **self._entry.data,
+                    CONF_DEVICE_ID: device_id,
+                    CONF_LOCAL_KEY: local_key,
+                },
+            )
+            return self.async_abort(
+                reason="reauth_successful"
+                if self.source == config_entries.SOURCE_REAUTH
+                else "reconfigure_successful"
+            )
 
-        if user_input is not None:
-            errors = _validate(user_input)
-            if not errors:
-                self.hass.config_entries.async_update_entry(
-                    entry,
-                    data={
-                        **entry.data,
-                        CONF_DEVICE_ID: user_input["device_id"].strip(),
-                        CONF_LOCAL_KEY: user_input["local_key"].strip(),
-                    },
-                )
-                return self.async_abort(reason=abort_reason)
-
-        return self.async_show_form(
-            step_id=step_id,
-            data_schema=_credentials_schema(
-                user_input
-                or TuyaBleCredentialsInput(
-                    device_id=existing["device_id"], local_key=""
-                )
+        return self.async_create_entry(
+            title=_entry_title(product, self._address),
+            data=cast(
+                "TuyaBleConfigData",
+                {
+                    CONF_ADDRESS: self._address,
+                    CONF_PRODUCT_ID: product.product_id,
+                    CONF_UUID: self._uuid,
+                    CONF_DEVICE_ID: device_id,
+                    CONF_LOCAL_KEY: local_key,
+                },
             ),
-            errors=errors,
         )
+
+    def _known_credentials(self) -> TuyaBleCredentialsInput | None:
+        """Pre-fill the manual form with the device id an entry already has."""
+        if self._entry is None:
+            return None
+        existing = cast("TuyaBleConfigData", self._entry.data)
+        return TuyaBleCredentialsInput(device_id=existing["device_id"], local_key="")
 
     def _adopt(self, discovery_info: BluetoothServiceInfoBleak) -> bool:
         """
         Read the advertisement and keep what it discloses.
 
-        Only the uuid is mandatory — it is what the pairing handshake needs.
-        The product is optional: a bound device does not broadcast a readable
-        product id, and the user is asked for it instead.
+        Only the uuid is mandatory — it is what the pairing handshake needs and
+        what ties the device to its record on the Tuya account. The product is
+        optional: a bound device does not broadcast a readable product id, and
+        it is read from the account or asked for instead.
         """
         try:
             advertisement = parse_advertisement(
@@ -275,6 +395,15 @@ class TuyaBleFlowHandler(config_entries.ConfigFlow, domain=DOMAIN):
             else discovery_info.address
         )
         return True
+
+    def _adopt_entry(self, entry: config_entries.ConfigEntry) -> None:
+        """Describe the device from the entry being re-authenticated or edited."""
+        existing = cast("TuyaBleConfigData", entry.data)
+        self._entry = entry
+        self._address = existing["address"]
+        self._product = product_for(existing["product_id"])
+        self._uuid = existing["uuid"]
+        self._name = entry.title
 
     def _candidates(self) -> dict[str, BluetoothServiceInfoBleak]:
         """Return the supported devices seen nearby that are not set up yet."""

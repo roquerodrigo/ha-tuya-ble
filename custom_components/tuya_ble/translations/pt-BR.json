@@ -11,7 +11,25 @@
             },
             "bluetooth_confirm": {
                 "title": "Configurar {name}",
-                "description": "Informe o device id e a local key deste dispositivo. Os dois aparecem na sua conta Tuya. Um dispositivo vinculado a uma conta Tuya não anuncia o que é, então escolha também o produto.\n\nA primeira leitura chega na próxima vez que o dispositivo se anunciar, o que pode levar alguns minutos — até lá os sensores ficam sem valor. As credenciais só são verificadas nesse momento, então uma local key errada aparece como pedido de re-autenticação, e não como erro neste formulário.",
+                "description": "Este dispositivo só aceita conexão de quem já sabe o device id e a local key dele, e nunca anuncia nenhum dos dois. Entre na conta Tuya à qual o dispositivo está vinculado para lê-los de lá, ou informe você mesmo.\n\nA primeira leitura chega na próxima vez que o dispositivo se anunciar, o que pode levar alguns minutos — até lá os sensores ficam sem valor. As credenciais só são verificadas nesse momento, então uma local key errada aparece como pedido de re-autenticação, e não como erro durante a configuração.",
+                "menu_options": {
+                    "account": "Usar minha conta Tuya",
+                    "manual": "Informar as credenciais manualmente"
+                }
+            },
+            "account": {
+                "title": "Entrar na Tuya",
+                "description": "Informe a conta do app da Tuya à qual este dispositivo está vinculado. As credenciais são usadas uma única vez, para ler o device id e a local key de {name}, e não são armazenadas.\n\nO código do país é o código telefônico com que a conta foi registrada, e a região é o data center onde ela fica.",
+                "data": {
+                    "email": "E-mail",
+                    "password": "Senha",
+                    "country_code": "Código do país",
+                    "region": "Região"
+                }
+            },
+            "manual": {
+                "title": "Configurar {name}",
+                "description": "Informe o device id e a local key deste dispositivo. Os dois aparecem na sua conta Tuya. Um dispositivo vinculado a uma conta Tuya não anuncia o que é, então escolha também o produto.",
                 "data": {
                     "device_id": "Device id",
                     "local_key": "Local key",
@@ -20,24 +38,30 @@
             },
             "reauth_confirm": {
                 "title": "Re-autenticar Tuya BLE",
-                "description": "O dispositivo parou de responder com a local key armazenada. Refaça o pareamento no app da Tuya e informe os valores atuais.\n\nComo na configuração inicial, as novas credenciais só são verificadas na próxima vez que o dispositivo se anunciar.",
-                "data": {
-                    "device_id": "Device id",
-                    "local_key": "Local key"
+                "description": "O dispositivo parou de responder com a local key armazenada. Refaça o pareamento no app da Tuya e leia as credenciais atuais da sua conta Tuya, ou informe você mesmo.\n\nComo na configuração inicial, as novas credenciais só são verificadas na próxima vez que o dispositivo se anunciar.",
+                "menu_options": {
+                    "account": "Usar minha conta Tuya",
+                    "manual": "Informar as credenciais manualmente"
                 }
             },
             "reconfigure": {
                 "title": "Reconfigurar Tuya BLE",
                 "description": "Atualize as credenciais deste dispositivo.",
-                "data": {
-                    "device_id": "Device id",
-                    "local_key": "Local key"
+                "menu_options": {
+                    "account": "Usar minha conta Tuya",
+                    "manual": "Informar as credenciais manualmente"
                 }
             }
         },
         "error": {
+            "account_busy": "A conta Tuya recusou o login, o que acontece depois de algumas tentativas seguidas. Espere um minuto e tente de novo.",
+            "cannot_connect": "Não foi possível acessar a conta Tuya. Confira a região e tente de novo.",
+            "device_not_in_account": "Esta conta não lista o dispositivo visto neste endereço.",
+            "invalid_auth": "A conta Tuya recusou estas credenciais.",
             "invalid_device_id": "Informe o device id da sua conta Tuya.",
-            "invalid_local_key": "A local key é curta demais para ser válida."
+            "invalid_local_key": "A local key é curta demais para ser válida.",
+            "unknown": "Não foi possível ler a conta Tuya.",
+            "unsupported_product": "A conta diz que este dispositivo é um produto que a integração não suporta."
         },
         "abort": {
             "already_configured": "Este dispositivo já está configurado.",
@@ -89,6 +113,15 @@
         "product": {
             "options": {
                 "gvygg3m8": "Sensor de solo (SGS01)"
+            }
+        },
+        "region": {
+            "options": {
+                "us": "Estados Unidos",
+                "eu": "Europa",
+                "cn": "China",
+                "in": "Índia",
+                "we": "Europa Ocidental"
             }
         }
     },
