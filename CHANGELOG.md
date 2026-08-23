@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.0.0...v1.1.0) (2026-08-23)
+
+
+### Features
+
+* read the credentials from the Tuya account ([f746791](https://github.com/roquerodrigo/ha-tuya-ble/commit/f7467911d006ad61a1e5df4d74cd5134839db535))
+
+
+### Dependencies
+
+* pin the SDK release that carries the account client ([b06ea09](https://github.com/roquerodrigo/ha-tuya-ble/commit/b06ea09ccd854705c0d97359348f4775c7b7ff3d))
+
 ## 1.0.0 (2026-08-19)
 
 
