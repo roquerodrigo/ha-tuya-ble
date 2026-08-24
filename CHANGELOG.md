@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.0](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.1.0...v1.2.0) (2026-08-24)
+
+
+### Features
+
+* **hacs:** ship the install zip with every release ([7ebdf2a](https://github.com/roquerodrigo/ha-tuya-ble/commit/7ebdf2a011a774f07791e6f4606a06bbbe1a7743))
+
+
+### Development Dependencies
+
+* **deps-dev:** bump the python-deps group with 4 updates ([1a79c58](https://github.com/roquerodrigo/ha-tuya-ble/commit/1a79c5815074728eb57a17d9f778eacd2591e2e5))
+
 ## [1.1.0](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.0.0...v1.1.0) (2026-08-23)
 
 
