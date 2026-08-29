@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from bluetooth_data_tools import monotonic_time_coarse
 from homeassistant.components.bluetooth import (
     BluetoothChange,
     BluetoothScanningMode,
@@ -17,10 +18,16 @@ from homeassistant.core import CoreState, callback
 from tuya_ble_sdk import (
     TuyaBleAuthenticationError,
     TuyaBleClient,
+    TuyaBleError,
     TuyaBleHandshakeTimeoutError,
 )
 
-from .const import LOGGER, SILENT_HANDSHAKES_BEFORE_REAUTH
+from .const import (
+    LOGGER,
+    MAX_POLL_BACKOFF_DOUBLINGS,
+    MAX_POLL_INTERVAL_SECONDS,
+    SILENT_HANDSHAKES_BEFORE_REAUTH,
+)
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -46,7 +53,10 @@ class TuyaBleDataUpdateCoordinator(
 
     The advertisement path is still worth keeping: it is what reads the device
     the moment it comes back after being out of range. ``scan_interval``
-    remains the minimum spacing between two reads, whichever path asks for one.
+    remains the minimum spacing between two reads, whichever path asks for one,
+    and it widens while the device is failing: a read holds one of the few
+    connection slots its Bluetooth proxy shares between every device behind it,
+    so an unreachable device must not keep asking at full rate.
     """
 
     def __init__(
@@ -61,6 +71,7 @@ class TuyaBleDataUpdateCoordinator(
         self._credentials = credentials
         self._scan_interval_seconds = scan_interval_seconds
         self._silent_handshakes = 0
+        self._failed_reads = 0
         super().__init__(
             hass=hass,
             logger=LOGGER,
@@ -87,6 +98,22 @@ class TuyaBleDataUpdateCoordinator(
             return
         self._async_handle_bluetooth_event(service_info, BluetoothChange.ADVERTISEMENT)
 
+    @property
+    def poll_interval_seconds(self) -> float:
+        """
+        The spacing a read has to respect right now.
+
+        It is ``scan_interval`` while the device answers and doubles with every
+        consecutive failure, up to an hour. A device that is out of range, flat
+        or refusing the key fails slowly — a whole minute of a proxy connection
+        slot per attempt — so retrying it at the configured rate would starve
+        every other device behind that proxy.
+        """
+        return min(
+            self._scan_interval_seconds * 2**self._failed_reads,
+            MAX_POLL_INTERVAL_SECONDS,
+        )
+
     def _needs_poll(
         self,
         service_info: BluetoothServiceInfoBleak,
@@ -95,16 +122,20 @@ class TuyaBleDataUpdateCoordinator(
         """Decide whether this advertisement is worth waking a connection for."""
         if self.hass.state is not CoreState.running:
             return False
-        if (
-            seconds_since_last_poll is not None
-            and seconds_since_last_poll < self._scan_interval_seconds
-        ):
+        if not self._is_read_due(seconds_since_last_poll):
             return False
         return (
             async_ble_device_from_address(
                 self.hass, service_info.device.address, connectable=True
             )
             is not None
+        )
+
+    def _is_read_due(self, seconds_since_last_poll: float | None) -> bool:
+        """Tell whether enough time has passed since the last read was attempted."""
+        return (
+            seconds_since_last_poll is None
+            or seconds_since_last_poll >= self.poll_interval_seconds
         )
 
     async def _async_poll_device(
@@ -116,7 +147,15 @@ class TuyaBleDataUpdateCoordinator(
         The report is merged over the previous one rather than replacing it:
         the device sends only the datapoints it has something to say about, so
         a partial report would otherwise blank every value it left out.
+
+        The interval is checked once more here. Home Assistant runs this
+        through a debouncer that only asks ``_needs_poll`` when it schedules a
+        call, so a read that outlasts the check timer leaves a call queued and
+        the debouncer runs it unconditionally once the previous one returns —
+        a second connection the interval never allowed for.
         """
+        if not self._is_read_due(self._seconds_since_last_poll()):
+            return self.data
         device = (
             async_ble_device_from_address(
                 self.hass, service_info.device.address, connectable=True
@@ -129,17 +168,38 @@ class TuyaBleDataUpdateCoordinator(
             ).async_read_data_points()
         except TuyaBleAuthenticationError as exception:
             LOGGER.error("Failed to authenticate with the device: %s", exception)
+            self._widen_the_interval()
             self._start_reauth()
             raise
         except TuyaBleHandshakeTimeoutError:
+            self._widen_the_interval()
             self._count_silent_handshake()
             raise
+        except TuyaBleError:
+            self._widen_the_interval()
+            raise
         self._silent_handshakes = 0
+        self._failed_reads = 0
         if not data_points:
             LOGGER.debug("%s: nothing new to report", self.address)
             return self.data
         LOGGER.debug("%s: read datapoints %s", self.address, sorted(data_points))
         return {**(self.data or {}), **data_points}
+
+    def _seconds_since_last_poll(self) -> float | None:
+        """How long ago the last read was attempted, by the clock the base uses."""
+        if not self._last_poll:
+            return None
+        return monotonic_time_coarse() - self._last_poll
+
+    def _widen_the_interval(self) -> None:
+        """Push the next attempt further out after a read that did not land."""
+        self._failed_reads = min(self._failed_reads + 1, MAX_POLL_BACKOFF_DOUBLINGS)
+        LOGGER.debug(
+            "%s: the read failed; the next one is due in %ss",
+            self.address,
+            self.poll_interval_seconds,
+        )
 
     def _count_silent_handshake(self) -> None:
         """

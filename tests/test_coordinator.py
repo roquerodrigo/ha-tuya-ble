@@ -291,3 +291,141 @@ async def test_a_partial_report_keeps_the_datapoints_it_left_out(
     assert merged[3].value == 51
     assert merged[15].value == 77
     assert set(merged) == {3, 5, 14, 15}
+
+
+async def test_a_read_that_is_not_due_opens_no_connection(
+    setup_integration, mock_client, resolvable_device
+):
+    """
+    The debouncer runs a queued call without asking whether a read is due.
+
+    A read that outlasts the check timer leaves one queued, so the interval has
+    to be enforced here too or the device gets a second connection it never
+    earned.
+    """
+    from bluetooth_data_tools import monotonic_time_coarse
+
+    coordinator = _coordinator(setup_integration)
+    coordinator.data = await coordinator._async_poll_device(service_info())
+    coordinator._last_poll = monotonic_time_coarse()
+    mock_client.async_read_data_points.reset_mock()
+
+    kept = await coordinator._async_poll_device(service_info())
+
+    assert mock_client.async_read_data_points.await_count == 0
+    assert kept == coordinator.data
+
+
+async def test_a_read_that_is_due_again_opens_a_connection(
+    setup_integration, mock_client, resolvable_device
+):
+    from bluetooth_data_tools import monotonic_time_coarse
+
+    coordinator = _coordinator(setup_integration)
+    coordinator._last_poll = monotonic_time_coarse() - coordinator.poll_interval_seconds
+
+    await coordinator._async_poll_device(service_info())
+
+    assert mock_client.async_read_data_points.await_count == 1
+
+
+async def test_a_failing_device_is_asked_less_and_less_often(
+    setup_integration, mock_client, resolvable_device
+):
+    """A failed read holds a proxy connection slot; retrying at full rate starves it."""
+    coordinator = _coordinator(setup_integration)
+    mock_client.async_read_data_points.side_effect = TuyaBleConnectionError("asleep")
+    interval = coordinator.poll_interval_seconds
+    observed = []
+
+    for _ in range(2):
+        with pytest.raises(TuyaBleConnectionError):
+            await coordinator._async_poll_device(service_info())
+        observed.append(coordinator.poll_interval_seconds)
+
+    assert observed == [interval * 2, interval * 4]
+
+
+async def test_the_interval_never_grows_past_an_hour(
+    setup_integration, mock_client, resolvable_device
+):
+    from custom_components.tuya_ble.const import MAX_POLL_INTERVAL_SECONDS
+
+    coordinator = _coordinator(setup_integration)
+    mock_client.async_read_data_points.side_effect = TuyaBleConnectionError("asleep")
+
+    for _ in range(20):
+        with pytest.raises(TuyaBleConnectionError):
+            await coordinator._async_poll_device(service_info())
+
+    assert coordinator.poll_interval_seconds == MAX_POLL_INTERVAL_SECONDS
+
+
+async def test_a_successful_read_restores_the_configured_interval(
+    setup_integration, mock_client, resolvable_device
+):
+    from .conftest import sample_data_points
+
+    coordinator = _coordinator(setup_integration)
+    interval = coordinator.poll_interval_seconds
+    mock_client.async_read_data_points.side_effect = TuyaBleConnectionError("asleep")
+    with pytest.raises(TuyaBleConnectionError):
+        await coordinator._async_poll_device(service_info())
+
+    mock_client.async_read_data_points.side_effect = None
+    mock_client.async_read_data_points.return_value = sample_data_points()
+    await coordinator._async_poll_device(service_info())
+
+    assert coordinator.poll_interval_seconds == interval
+
+
+async def test_a_rejected_local_key_also_widens_the_interval(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    coordinator = _coordinator(setup_integration)
+    interval = coordinator.poll_interval_seconds
+    mock_client.async_read_data_points.side_effect = TuyaBleAuthenticationError("no")
+
+    with pytest.raises(TuyaBleAuthenticationError):
+        await coordinator._async_poll_device(service_info())
+    await hass.async_block_till_done()
+
+    assert coordinator.poll_interval_seconds == interval * 2
+
+
+async def test_a_silent_handshake_also_widens_the_interval(
+    setup_integration, mock_client, resolvable_device
+):
+    from tuya_ble_sdk import TuyaBleHandshakeTimeoutError
+
+    coordinator = _coordinator(setup_integration)
+    interval = coordinator.poll_interval_seconds
+    mock_client.async_read_data_points.side_effect = TuyaBleHandshakeTimeoutError("h")
+
+    with pytest.raises(TuyaBleHandshakeTimeoutError):
+        await coordinator._async_poll_device(service_info())
+
+    assert coordinator.poll_interval_seconds == interval * 2
+
+
+async def test_a_widened_interval_holds_back_the_timer(
+    hass, setup_integration, mock_client, resolvable_device
+):
+    from unittest.mock import patch
+
+    coordinator = _coordinator(setup_integration)
+    mock_client.async_read_data_points.side_effect = TuyaBleConnectionError("asleep")
+
+    with patch(
+        "custom_components.tuya_ble.coordinator.async_last_service_info",
+        return_value=service_info(),
+    ):
+        coordinator.async_poll_if_due(None)
+        await hass.async_block_till_done()
+    attempts = mock_client.async_read_data_points.await_count
+
+    assert (
+        coordinator._needs_poll(service_info(), coordinator._scan_interval_seconds)
+        is False
+    )
+    assert attempts >= 1
