@@ -59,7 +59,7 @@ config_flow.py   → reads the advertisement, then reads device_id + local_key
                    from the Tuya account (account.py) or asks for them
 __init__.py      → builds the coordinator and forwards the sensor platform
 coordinator.py   → polls when a reading is due; returns the datapoints
-sensor.py        → one class per entity, picked from a per-product table
+sensor/          → one class per entity, picked from a per-product table
 ```
 
 ### Why the coordinator is not a `DataUpdateCoordinator`
@@ -85,6 +85,26 @@ not delayed a whole extra cycle by the tick grid.
 A reading that returns no datapoint is normal — the device acknowledges the
 request and stays quiet unless it has something to report — so the coordinator
 keeps the previous values instead of surfacing an error.
+
+**A reading costs a connection slot**, and that is the second non-obvious
+part. An ESPHome Bluetooth proxy shares three of them between every device
+behind it, and a read holds one from the first connection attempt until the
+disconnect — up to a minute when the device is asleep or out of range. Two
+things keep that from starving the proxy:
+
+- `poll_interval_seconds` doubles with every consecutive failed read, up to
+  `MAX_POLL_INTERVAL_SECONDS` (1 h), and drops back to `scan_interval` on the
+  first successful one. Without it a device that always fails is retried at
+  full rate forever.
+- `_async_poll_device` re-checks that a read is due before connecting. Home
+  Assistant drives the poll through a `Debouncer` that consults
+  `needs_poll_method` only when it *schedules* a call, so a read that outlasts
+  `POLL_CHECK_INTERVAL_SECONDS` leaves a call queued and the debouncer then
+  runs it unconditionally — a second connection the interval never allowed
+  for.
+
+The session itself is bounded on the SDK side (`SESSION_TIMEOUT`,
+`CONNECT_TIMEOUT`), so the slot always comes back.
 
 A `TuyaBleAuthenticationError` from the SDK means the stored local key was
 rejected; the coordinator starts the reauth flow and re-raises.
@@ -129,7 +149,7 @@ work; a wrong local key surfaces on the first poll as a reauth prompt.
 ### Products
 
 `products.py` is the catalogue of supported devices, keyed by product id.
-`sensor.py` maps the same key to the entity classes that product exposes, so a
+`sensor/` maps the same key to the entity classes that product exposes, so a
 second device is a table entry rather than a new platform.
 
 The product id is **not** reliably readable from the air: a device bound to a
