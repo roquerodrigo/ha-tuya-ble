@@ -1120,7 +1120,7 @@ wheels = [
 
 [[package]]
 name = "ha-tuya-ble"
-version = "1.1.0"
+version = "1.2.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]
@@ -1160,7 +1160,7 @@ dev = [
     { name = "pytest-cov", specifier = "==7.1.0" },
     { name = "pytest-homeassistant-custom-component", specifier = "==0.13.354" },
     { name = "serialx", specifier = "==1.8.2" },
-    { name = "tuya-ble-sdk", specifier = "==0.1.2" },
+    { name = "tuya-ble-sdk", specifier = "==0.1.3" },
 ]
 lint = [
     { name = "mypy", specifier = "==2.3.1" },
@@ -2757,7 +2757,7 @@ wheels = [
 
 [[package]]
 name = "tuya-ble-sdk"
-version = "0.1.2"
+version = "0.1.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "aiohttp" },
@@ -2765,9 +2765,9 @@ dependencies = [
     { name = "bleak-retry-connector" },
     { name = "cryptography" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/b0/8d/9f8880c3fdb116f4f0f725a627fba9f8e72440e4e5efa4007e8b4f34ea9d/tuya_ble_sdk-0.1.2.tar.gz", hash = "sha256:71c36e53c8203cf608d7c49c28039dd8f1927a9e25eb181e769783900388ab03", size = 141441, upload-time = "2026-08-23T18:08:03.779Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/00/f5/0ec926b8b865bb429669c7ab4b0f82e7453462f8071559124d762ecb23eb/tuya_ble_sdk-0.1.3.tar.gz", hash = "sha256:e22b6c7468f495b71ca6ea74c1fd9dbb723ef7d05de0431aa50b643998e934ab", size = 143133, upload-time = "2026-08-30T00:06:05.669Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/93/bf/5877aad06cdb04602286f31fba7087d8fbfd0f4d18b4561f6b7e41ae225d/tuya_ble_sdk-0.1.2-py3-none-any.whl", hash = "sha256:855f3084cb2bf3c6bee22722631dca4c3165868e7afd587d21fb902174a59c56", size = 41777, upload-time = "2026-08-23T18:08:02.72Z" },
+    { url = "https://files.pythonhosted.org/packages/82/10/592ca6198b3c1b8d6cc17b1b8a18cd379a157f1d8f46a13eb4ccf4dbbafd/tuya_ble_sdk-0.1.3-py3-none-any.whl", hash = "sha256:1bfee35f5cc7dfab1bde7de2771a47add203203c8547d2c71970c39aac5cfffc", size = 42340, upload-time = "2026-08-30T00:06:04.54Z" },
 ]
 
 [[package]]
