@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.2.1](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.2.0...v1.2.1) (2026-08-30)
+
+
+### Bug Fixes
+
+* stop asking a failing device for a reading at full rate ([b75c6be](https://github.com/roquerodrigo/ha-tuya-ble/commit/b75c6bec17598cbe35994b4a31acbd82a86d1669))
+
+
+### Dependencies
+
+* bump tuya-ble-sdk to 0.1.3 ([e699ec2](https://github.com/roquerodrigo/ha-tuya-ble/commit/e699ec27a7f422463ba104f58a63c6de49f0faad))
+
+
+### Documentation
+
+* point the architecture map at the sensor package ([9380cf8](https://github.com/roquerodrigo/ha-tuya-ble/commit/9380cf8e102888d9b6091c85ebf054933dccf9ee))
+
 ## [1.2.0](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.1.0...v1.2.0) (2026-08-24)
 
 
