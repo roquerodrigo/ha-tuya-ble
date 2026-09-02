@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.2.1...v1.2.2) (2026-09-02)
+
+
+### Documentation
+
+* add GitHub Sponsors button and support section ([dd9d0d3](https://github.com/roquerodrigo/ha-tuya-ble/commit/dd9d0d39ddba02717f3c9b92c140143713d7ff7c))
+
 ## [1.2.1](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.2.0...v1.2.1) (2026-08-30)
 
 
