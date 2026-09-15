@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.2](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.2.1...v1.2.2) (2026-09-15)
+
+
+### Development Dependencies
+
+* **deps-dev:** bump the python-deps group across 1 directory with 3 updates ([4c841f1](https://github.com/roquerodrigo/ha-tuya-ble/commit/4c841f16bf54d9c17f129caf0a3fb1e492443451))
+* **deps-dev:** bump the python-deps group with 2 updates ([5601ed7](https://github.com/roquerodrigo/ha-tuya-ble/commit/5601ed78d8494ec0011341dfa328bfcae7746c5c))
+
+
+### Documentation
+
+* add GitHub Sponsors button and support section ([dd9d0d3](https://github.com/roquerodrigo/ha-tuya-ble/commit/dd9d0d39ddba02717f3c9b92c140143713d7ff7c))
+
 ## [1.2.1](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.2.0...v1.2.1) (2026-08-30)
 
 
