@@ -19,8 +19,7 @@ This file deliberately avoids restating those rules — it only adds:
 The design in [`PLAN.md`](./PLAN.md) is implemented: the blueprint's sample
 cloud integration is gone and `custom_components/tuya_ble/` reads a Tuya BLE
 device over Bluetooth. The protocol lives in the companion SDK
-`tuya-ble-sdk` (sibling repository), which this integration pins exactly from
-`manifest.json`.
+`tuya-ble-sdk`, which this integration pins exactly from `manifest.json`.
 
 `PLAN.md` remains the reference for *why* the design looks the way it does; the
 architecture section below records *what* exists.
