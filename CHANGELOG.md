@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.2.2](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.2.1...v1.2.2) (2026-10-02)
+
+
+### Dependencies
+
+* **deps:** bump urllib3 from 2.7.0 to 2.8.0 ([933ec06](https://github.com/roquerodrigo/ha-tuya-ble/commit/933ec063f8df0281d55246d4981edbf0f6da9fb0))
+
+
+### Development Dependencies
+
+* **deps-dev:** bump ruff in the python-deps group ([3287e03](https://github.com/roquerodrigo/ha-tuya-ble/commit/3287e0385bc14a74846da511ae1a55a445ba4929))
+* **deps-dev:** bump the python-deps group across 1 directory with 3 updates ([4c841f1](https://github.com/roquerodrigo/ha-tuya-ble/commit/4c841f16bf54d9c17f129caf0a3fb1e492443451))
+* **deps-dev:** bump the python-deps group with 2 updates ([f3a9c81](https://github.com/roquerodrigo/ha-tuya-ble/commit/f3a9c81208428013ad344eb0e227f5ffa2e19902))
+* **deps-dev:** bump the python-deps group with 2 updates ([5601ed7](https://github.com/roquerodrigo/ha-tuya-ble/commit/5601ed78d8494ec0011341dfa328bfcae7746c5c))
+
+
+### Documentation
+
+* add GitHub Sponsors button and support section ([dd9d0d3](https://github.com/roquerodrigo/ha-tuya-ble/commit/dd9d0d39ddba02717f3c9b92c140143713d7ff7c))
+* refresh CLAUDE.md ([02c7575](https://github.com/roquerodrigo/ha-tuya-ble/commit/02c75750d48f492741a7a653b713953ee214b502))
+
+
+### Build System
+
+* **release:** bump uv.lock through release-please ([d7edc09](https://github.com/roquerodrigo/ha-tuya-ble/commit/d7edc09c9656415c5dd7e9b045418b8aed82aae9))
+
 ## [1.2.1](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.2.0...v1.2.1) (2026-08-30)
 
 
