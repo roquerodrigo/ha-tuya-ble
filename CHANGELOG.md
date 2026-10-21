@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.2](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.2.1...v1.2.2) (2026-10-21)
+
+
+### Miscellaneous Chores
+
+* **release:** keep only user-facing changes in the changelog ([8684604](https://github.com/roquerodrigo/ha-tuya-ble/commit/86846046d8458d2758174ca15c4ca64bc7ed2df4))
+
 ## [1.2.1](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.2.0...v1.2.1) (2026-08-30)
 
 
