@@ -108,6 +108,12 @@ The session itself is bounded on the SDK side (`SESSION_TIMEOUT`,
 A `TuyaBleAuthenticationError` from the SDK means the stored local key was
 rejected; the coordinator starts the reauth flow and re-raises.
 
+A wrong key usually does **not** raise that error: the device never says
+"wrong key", it just drops the handshake frame the key protects, which the SDK
+reports as `TuyaBleHandshakeTimeoutError`. A busy device drops frames too, so
+the coordinator only opens reauth after `SILENT_HANDSHAKES_BEFORE_REAUTH` (3)
+consecutive silent handshakes; any successful read resets the count.
+
 ### Entry typing
 
 The `data/` package holds one TypedDict/dataclass per file. `data/__init__.py`
@@ -143,7 +149,8 @@ from the advertisement, `uuid` is decrypted from it, and `device_id` /
 The credentials are **not** tried against the device while the flow is open: it
 is asleep most of the time, so a connection attempt would time out far more
 often than it would catch a typo. `_validate` only rejects what cannot possibly
-work; a wrong local key surfaces on the first poll as a reauth prompt.
+work; a wrong local key surfaces later as a reauth prompt, once the device
+has ignored enough handshakes (see the coordinator section above).
 
 ### Products
 
