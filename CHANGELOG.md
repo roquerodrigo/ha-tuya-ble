@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.2.2](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.2.1...v1.2.2) (2026-11-01)
+
+Internal maintenance only, with no changes for those who use the project.
+
 ## [1.2.1](https://github.com/roquerodrigo/ha-tuya-ble/compare/v1.2.0...v1.2.1) (2026-08-30)
 
 
