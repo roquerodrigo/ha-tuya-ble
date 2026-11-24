@@ -8,21 +8,18 @@ Before creating, renaming or restructuring any file/class/function, **read [`COD
 
 For user-facing topics (supported devices, installation, configuration, entities), see [`README.md`](./README.md); for the development setup and commands, see [`CONTRIBUTING.md`](./CONTRIBUTING.md).
 
-This file deliberately avoids restating those rules — it only adds:
+This file deliberately avoids restating those rules. It only adds:
 
 1. The verification workflow agents must run after every change.
 2. The architectural reasoning that is not obvious from `CODE_STYLE.md` alone.
-3. Where the repository currently stands against the design in [`PLAN.md`](./PLAN.md).
+3. The device and protocol notes the design rests on.
 
 ## Current state
 
-The design in [`PLAN.md`](./PLAN.md) is implemented: the blueprint's sample
-cloud integration is gone and `custom_components/tuya_ble/` reads a Tuya BLE
-device over Bluetooth. The protocol lives in the companion SDK
-`tuya-ble-sdk`, which this integration pins exactly from `manifest.json`.
-
-`PLAN.md` remains the reference for *why* the design looks the way it does; the
-architecture section below records *what* exists.
+`custom_components/tuya_ble/` reads a Tuya BLE device over Bluetooth. The
+protocol lives in the companion SDK `tuya-ble-sdk`, which this integration pins
+exactly from `manifest.json`. The architecture section below records what
+exists and why.
 
 ## Verification workflow
 
@@ -172,3 +169,38 @@ whenever the advertisement did not name it.
 and `uuid` are redacted via `async_redact_data` (driven by
 `TO_REDACT: frozenset[str]`); the dump also carries a summary of the last
 advertisement and the last datapoint report.
+
+## Device and protocol notes
+
+The protocol is ported from
+[`PlusPlus-ua/ha_tuya_ble`](https://github.com/PlusPlus-ua/ha_tuya_ble) (MIT);
+keep the credit in the README.
+
+The SGS01 advertises service `0000a201-0000-1000-8000-00805f9b34fb`. Its
+service data carries the product id record, and its manufacturer data
+(`0x07D0`) carries the protocol version, the bound flag (bit `0x80`) and the
+encrypted device uuid. Decrypting `manufacturer_data[6:]` with AES-128-CBC,
+key and IV both `md5(product_id record)`, yields the uuid in ASCII.
+
+| DP | Code | Type | Meaning |
+| --- | --- | --- | --- |
+| 3 | `humidity` | value | soil moisture, % |
+| 5 | `temp_current` | value | temperature, ÷10, °C |
+| 9 | `temp_unit_convert` | enum `c`/`f` | display unit on the device |
+| 14 | `battery_state` | enum `low`/`middle`/`high` | battery state |
+| 15 | `battery_percentage` | value | battery, % |
+
+Watch out for:
+
+- **A bound device obfuscates its product id record.** The bytes are no longer
+  printable, though `md5()` of them still decrypts the uuid. Hash the record as
+  broadcast; decoding it as text first rejects every bound device.
+- **A rejected `PAIR` means a stale local key.** The device was re-paired in
+  the Tuya app after the key was read; read it again.
+- **Protocol version 3.** The reference implementation branches on the version
+  in a few places (`DPS_V4` codes exist for v4 devices). Test against what the
+  device answers.
+- **One connection at a time.** The Tuya app on a phone holds the device while
+  it is open, so a failing connection during development is often that.
+- Both repositories are public: no local keys, device ids or MACs in the code,
+  the tests or the commit messages.
